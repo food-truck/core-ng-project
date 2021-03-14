@@ -80,7 +80,7 @@ public class MessageProducer {
                     ProducerConfig.MAX_REQUEST_SIZE_CONFIG, maxRequestSize);
             if (saslConfig != null) {
                 config.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SASL_SSL.name); // default to SASL_SSL, if enable SASL authentication
-                config.put(SaslConfigs.SASL_MECHANISM, saslConfig.mechanism);
+                config.put(SaslConfigs.SASL_MECHANISM, SASLConfig.MECHANISM);
                 config.put(SaslConfigs.SASL_JAAS_CONFIG, saslConfig.jaas());
             }
             var serializer = new ByteArraySerializer();

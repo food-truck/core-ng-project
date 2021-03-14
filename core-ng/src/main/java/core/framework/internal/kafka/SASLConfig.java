@@ -4,7 +4,7 @@ package core.framework.internal.kafka;
  * @author mort
  */
 public class SASLConfig {
-    public final String mechanism = "PLAIN"; // only support PLAIN for now, https://kafka.apache.org/documentation/#security_overview
+    public static final String MECHANISM = "PLAIN"; // only support PLAIN for now, https://kafka.apache.org/documentation/#security_overview
     private final String jaas;
 
     public SASLConfig(String jaas) {
