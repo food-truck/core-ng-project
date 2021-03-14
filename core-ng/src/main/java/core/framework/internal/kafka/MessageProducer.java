@@ -2,13 +2,16 @@ package core.framework.internal.kafka;
 
 import core.framework.kafka.KafkaException;
 import core.framework.util.StopWatch;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.record.CompressionType;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,12 +28,22 @@ public class MessageProducer {
     public final ProducerMetrics producerMetrics;
     private final Logger logger = LoggerFactory.getLogger(MessageProducer.class);
     private final KafkaURI uri;
+    private final SASLConfig saslConfig;
     private final String name;
     private final int maxRequestSize;
     private volatile Producer<byte[], byte[]> producer;
 
     public MessageProducer(KafkaURI uri, String name, int maxRequestSize) {
         this.uri = uri;
+        this.name = name;
+        this.maxRequestSize = maxRequestSize;
+        this.producerMetrics = new ProducerMetrics(name);
+        this.saslConfig = null;
+    }
+
+    public MessageProducer(KafkaURI uri, SASLConfig saslConfig, String name, int maxRequestSize) {
+        this.uri = uri;
+        this.saslConfig = saslConfig;
         this.name = name;
         this.maxRequestSize = maxRequestSize;
         this.producerMetrics = new ProducerMetrics(name);
@@ -65,7 +78,11 @@ public class MessageProducer {
                     ProducerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, 5_000L,                      // 5s
                     ProducerConfig.MAX_BLOCK_MS_CONFIG, 30_000L,                                 // 30s, metadata update timeout, shorter than default, to get exception sooner if kafka is not available
                     ProducerConfig.MAX_REQUEST_SIZE_CONFIG, maxRequestSize);
-
+            if (saslConfig != null) {
+                config.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SASL_SSL.name); // default to SASL_SSL, if enable SASL authentication
+                config.put(SaslConfigs.SASL_MECHANISM, saslConfig.mechanism);
+                config.put(SaslConfigs.SASL_JAAS_CONFIG, saslConfig.jaas());
+            }
             var serializer = new ByteArraySerializer();
             var producer = new KafkaProducer<>(config, serializer, serializer);
             producerMetrics.set(producer.metrics());

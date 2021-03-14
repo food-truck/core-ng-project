@@ -7,9 +7,12 @@ import core.framework.util.Maps;
 import core.framework.util.Network;
 import core.framework.util.StopWatch;
 import core.framework.util.Threads;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.config.SaslConfigs;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +35,7 @@ public class MessageListener {
 
     private final Logger logger = LoggerFactory.getLogger(MessageListener.class);
     private final KafkaURI uri;
+    private final SASLConfig saslConfig;
     private final String name;
     private final Set<String> topics = new HashSet<>();
 
@@ -50,6 +54,15 @@ public class MessageListener {
     public MessageListener(KafkaURI uri, String name, LogManager logManager) {
         this.uri = uri;
         this.name = name;
+        this.logManager = logManager;
+        this.saslConfig = null;
+        this.consumerMetrics = new ConsumerMetrics(name);
+    }
+
+    public MessageListener(KafkaURI uri, SASLConfig saslConfig, String name, LogManager logManager) {
+        this.uri = uri;
+        this.name = name;
+        this.saslConfig = saslConfig;
         this.logManager = logManager;
         this.consumerMetrics = new ConsumerMetrics(name);
     }
@@ -129,6 +142,11 @@ public class MessageListener {
             config.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, maxPollBytes);
             config.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, minPollBytes);
             config.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, (int) maxWaitTime.toMillis());
+            if (saslConfig != null) {
+                config.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SASL_SSL.name); // default to SASL_SSL, if enable SASL authentication
+                config.put(SaslConfigs.SASL_MECHANISM, saslConfig.mechanism);
+                config.put(SaslConfigs.SASL_JAAS_CONFIG, saslConfig.jaas());
+            }
             var deserializer = new ByteArrayDeserializer();
             Consumer<byte[], byte[]> consumer = new KafkaConsumer<>(config, deserializer, deserializer);
             consumerMetrics.add(consumer.metrics());

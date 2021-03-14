@@ -6,6 +6,7 @@ import core.framework.internal.kafka.KafkaURI;
 import core.framework.internal.kafka.MessageListener;
 import core.framework.internal.kafka.MessageProducer;
 import core.framework.internal.kafka.MessagePublisherImpl;
+import core.framework.internal.kafka.SASLConfig;
 import core.framework.internal.module.Config;
 import core.framework.internal.module.ModuleContext;
 import core.framework.internal.module.ShutdownHook;
@@ -13,6 +14,7 @@ import core.framework.internal.web.management.KafkaController;
 import core.framework.kafka.BulkMessageHandler;
 import core.framework.kafka.MessageHandler;
 import core.framework.kafka.MessagePublisher;
+import core.framework.util.Strings;
 import core.framework.util.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +33,7 @@ public class KafkaConfig extends Config {
     private ModuleContext context;
     private KafkaURI uri;
     private MessageListener listener;
+    private SASLConfig saslConfig;
     private boolean handlerAdded;
     private int maxRequestSize = 1024 * 1024;   // default 1M, refer to org.apache.kafka.clients.producer.ProducerConfig.MAX_REQUEST_SIZE_CONFIG
 
@@ -52,6 +55,12 @@ public class KafkaConfig extends Config {
         this.uri = new KafkaURI(uri);
     }
 
+    public void sasl(String jaasConfig) {
+        if (Strings.isBlank(jaasConfig))
+            throw new Error("JAAS must be configured with security protocol SASL/PLAIN");
+        this.saslConfig = new SASLConfig(jaasConfig);
+    }
+
     // for use case as replying message back to publisher, so the topic can be dynamic (different services (consumer group) expect to receive reply in their own topic)
     public <T> MessagePublisher<T> publish(Class<T> messageClass) {
         return publish(null, messageClass);
@@ -69,7 +78,7 @@ public class KafkaConfig extends Config {
 
     <T> MessagePublisher<T> createMessagePublisher(String topic, Class<T> messageClass) {
         if (producer == null) {
-            var producer = new MessageProducer(uri, name, maxRequestSize);
+            var producer = new MessageProducer(uri, saslConfig, name, maxRequestSize);
             producer.tryCreateProducer();  // try to init kafka during startup
             context.collector.metrics.add(producer.producerMetrics);
             context.shutdownHook.add(ShutdownHook.STAGE_4, producer::close);
@@ -107,7 +116,7 @@ public class KafkaConfig extends Config {
     private MessageListener listener() {
         if (listener == null) {
             if (uri == null) throw new Error("kafka uri must be configured first, name=" + name);
-            var listener = new MessageListener(uri, name, context.logManager);
+            var listener = new MessageListener(uri, saslConfig, name, context.logManager);
             context.startupHook.add(listener::start);
             context.shutdownHook.add(ShutdownHook.STAGE_0, timeout -> listener.shutdown());
             context.shutdownHook.add(ShutdownHook.STAGE_1, listener::awaitTermination);
