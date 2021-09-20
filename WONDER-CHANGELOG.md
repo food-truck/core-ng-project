@@ -5,6 +5,7 @@
 * es: support ElasticSearch API keys
 > refer to https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/_other_authentication_methods.html#_elasticsearch_api_keys
 * log-processor: add ElasticSearch API keys optional config
+* monitor: add ElasticSearch API keys optional config
 
 ### 0.0.1 (08/17/2021)
 
