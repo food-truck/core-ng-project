@@ -45,7 +45,7 @@ public class TestModule extends AbstractTestModule {
 
         configureHTTP();
         configureSite();
-        configureAPI();
+        api().client(TestWebService.class, "https://localhost:8443").intercept(new TestWebServiceClientInterceptor());
 
         bind(new TestBean(requiredProperty("test.inject-test.property")));
 
@@ -59,19 +59,15 @@ public class TestModule extends AbstractTestModule {
         });
     }
 
-    private void configureAPI() {
-        api().client(TestWebService.class, "https://localhost:8443").intercept(new TestWebServiceClientInterceptor());
-        api().publishAPI(List.of("0.0.0.0/0"));
-    }
-
     private void configureRedis() {
         redis().host("localhost");
+        redis().password("password");
 
         redis("redis2").host("localhost");
     }
 
     private void configureCache() {
-        cache().redis("localhost");
+        cache().redis("localhost", "password");
         cache().maxLocalSize(5000);
         cache().add(TestDBEntity.class, Duration.ofHours(6));
     }
@@ -87,6 +83,7 @@ public class TestModule extends AbstractTestModule {
         site().session().cookie("SessionId", "localhost");
         site().cdn().host("//cdn");
         site().security().contentSecurityPolicy("default-src 'self' https://cdn; img-src 'self' https://cdn data:; object-src 'none'; frame-src 'none';");
+        site().allowAPI(List.of("0.0.0.0/0"));
     }
 
     private void configureHTTP() {

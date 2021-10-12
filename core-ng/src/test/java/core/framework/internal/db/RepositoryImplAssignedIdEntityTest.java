@@ -81,8 +81,8 @@ class RepositoryImplAssignedIdEntityTest {
         AssignedIdEntity entity = entity(null, "string", 1);
 
         assertThatThrownBy(() -> repository.insert(entity))
-                .isInstanceOf(Error.class)
-                .hasMessageContaining("primary key must not be null");
+            .isInstanceOf(Error.class)
+            .hasMessageContaining("primary key must not be null");
     }
 
     @Test
@@ -106,7 +106,7 @@ class RepositoryImplAssignedIdEntityTest {
         AssignedIdEntity entity = entity(UUID.randomUUID().toString(), "string", 11);
         repository.insert(entity);
 
-        AssignedIdEntity updatedEntity = new AssignedIdEntity();
+        var updatedEntity = new AssignedIdEntity();
         updatedEntity.id = entity.id;
         updatedEntity.stringField = "updated";
         updatedEntity.dateField = LocalDate.of(2016, Month.JULY, 5);
@@ -115,6 +115,25 @@ class RepositoryImplAssignedIdEntityTest {
         AssignedIdEntity result = repository.get(entity.id).orElseThrow();
         assertThat(result.stringField).isEqualTo(updatedEntity.stringField);
         assertThat(result.dateField).isEqualTo(updatedEntity.dateField);
+        assertThat(result.intField).isEqualTo(11);
+    }
+
+    @Test
+    void partialUpdateWithCondition() {
+        AssignedIdEntity entity = entity(UUID.randomUUID().toString(), "string", 11);
+        repository.insert(entity);
+
+        var updatedEntity = new AssignedIdEntity();
+        updatedEntity.id = entity.id;
+        updatedEntity.stringField = "updated";
+        boolean updated = repository.partialUpdate(updatedEntity, "int_field = ?", 12);
+        assertThat(updated).isFalse();
+
+        updated = repository.partialUpdate(updatedEntity, "int_field = ?", 11);
+        assertThat(updated).isTrue();
+
+        AssignedIdEntity result = repository.get(entity.id).orElseThrow();
+        assertThat(result.stringField).isEqualTo(updatedEntity.stringField);
         assertThat(result.intField).isEqualTo(11);
     }
 
@@ -135,30 +154,31 @@ class RepositoryImplAssignedIdEntityTest {
             AssignedIdEntity entity = entity(String.valueOf(i), "value" + i, 10 + i);
             entities.add(entity);
         }
-        repository.batchInsert(entities);
+        Optional<long[]> ids = repository.batchInsert(entities);
 
         assertThat(repository.get("1")).get().usingRecursiveComparison().isEqualTo(entities.get(0));
         assertThat(repository.get("2")).get().usingRecursiveComparison().isEqualTo(entities.get(1));
+        assertThat(ids).isEmpty();
     }
 
     @Test
     void batchInsertWithEmptyEntities() {
         assertThatThrownBy(() -> repository.batchInsert(List.of()))
-                .isInstanceOf(Error.class)
-                .hasMessageContaining("entities must not be empty");
+            .isInstanceOf(Error.class)
+            .hasMessageContaining("entities must not be empty");
     }
 
     @Test
     void batchInsertIgnore() {
         List<AssignedIdEntity> entities = Lists.newArrayList();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             AssignedIdEntity entity = entity(String.valueOf(i), "value" + i, 10 + i);
             entities.add(entity);
             entities.add(entity);
         }
-        int inserted = repository.batchInsertIgnore(entities);
+        boolean[] results = repository.batchInsertIgnore(entities);
 
-        assertThat(inserted).isEqualTo(10);
+        assertThat(results).hasSize(10).contains(true, false, true, false, true, false, true, false, true, false);
         assertThat(repository.get("0")).get().usingRecursiveComparison().isEqualTo(entities.get(0));
         assertThat(repository.get("1")).get().usingRecursiveComparison().isEqualTo(entities.get(2));
     }
@@ -182,8 +202,8 @@ class RepositoryImplAssignedIdEntityTest {
     @Test
     void batchDeleteWithEmptyPrimaryKeys() {
         assertThatThrownBy(() -> repository.batchDelete(List.of()))
-                .isInstanceOf(Error.class)
-                .hasMessageContaining("primaryKeys must not be empty");
+            .isInstanceOf(Error.class)
+            .hasMessageContaining("primaryKeys must not be empty");
     }
 
     @Test
@@ -203,8 +223,8 @@ class RepositoryImplAssignedIdEntityTest {
         assertThat(sum).hasValue(50);
 
         assertThatThrownBy(query::fetch)
-                .isInstanceOf(Error.class)
-                .hasMessageContaining("fetch must not be used with groupBy");
+            .isInstanceOf(Error.class)
+            .hasMessageContaining("fetch must not be used with groupBy");
     }
 
     @Test
