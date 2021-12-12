@@ -1,9 +1,33 @@
 ## Change Log In Wonder
 
+### 1.2.0 (12/13/2021)
+
+* corresponds to upstream version **7.9.0**.
+* jdk: updated to JDK 17
+  > for local env, it's easier to use intellij builtin way to download SDK, or go to https://adoptium.net/
+  > adoptium (renamed from adoptopenjdk) doesn't provide JRE docker image anymore, you should build for yourself (or use JDK one if you don't mind image size)
+  > refer to docker/jre folder, here it has slimmed jre image for generic core-ng app
+* message: make Message.get() more tolerable, won't fail but log as error if key is missing or language is null
+  > use first language defined in site().message() if language is null
+  > return key and log error if message key is missing,
+  > with integration test context, still throw error if key is missing, to make message unit test easier to write
+* http: update undertow to 2.2.12
+* actionLog: added ActionLogContext.trace() to trigger trace log
+  > e.g. to integrate with external services, we want to track all the request/response for critical actions
+  > recommended way is to use log-processor forward all action log messages to application kafka
+  > then to create audit-service, consume the action log messages, save trace to designated location (Cloud Storage Service)
+* action: removed ActionLogContext.remainingProcessTime(), and httpClient retryInterceptor won't consider actionLog.remainingProcessTimeInNano
+  > it's not feasible to adapt time left before making external call (most likely http call with timeout),
+  > due to http call is out of control (e.g. take long to create connection with external site), or external sdk/client not managed by framework
+  > so it's better to careful plan in advance for sync chained http calls
+  > maxProcessTime mechanism will be mainly used for measurement/visibility purpose (alert if one action took too long, close to maxProcessTime)
+
 ### 1.1.3 (12/13/2021)
 
 * es: support ElasticSearch API keys
+
 > refer to https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/_other_authentication_methods.html#_elasticsearch_api_keys
+
 * log-processor: add ElasticSearch API keys optional config
 * monitor: add ElasticSearch API keys optional config
 
