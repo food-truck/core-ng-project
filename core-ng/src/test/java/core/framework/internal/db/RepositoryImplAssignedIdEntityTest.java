@@ -36,7 +36,6 @@ class RepositoryImplAssignedIdEntityTest {
         database = new DatabaseImpl("db");
         database.url("jdbc:hsqldb:mem:.;sql.syntax_mys=true");
         database.isolationLevel = IsolationLevel.READ_UNCOMMITTED;
-        database.operation.batchSize = 7;
         database.execute("CREATE TABLE assigned_id_entity (id VARCHAR(36) PRIMARY KEY, string_field VARCHAR(20), int_field INT, big_decimal_field DECIMAL(10,2), date_field DATE)");
 
         repository = database.repository(AssignedIdEntity.class);
@@ -77,6 +76,21 @@ class RepositoryImplAssignedIdEntityTest {
     }
 
     @Test
+    void upsert() {
+        String id = UUID.randomUUID().toString();
+        AssignedIdEntity entity = entity(id, "string", 12);
+
+        boolean inserted = repository.upsert(entity);
+        assertThat(inserted).isTrue();
+        assertThat(repository.get(id)).get().usingRecursiveComparison().isEqualTo(entity);
+
+        entity.stringField = "updated";
+        repository.upsert(entity);
+        // due to HSQL doesn't support MySQL's useAffectedRows behavior, upsert always return true
+        assertThat(repository.get(id)).get().usingRecursiveComparison().isEqualTo(entity);
+    }
+
+    @Test
     void validateId() {
         AssignedIdEntity entity = entity(null, "string", 1);
 
@@ -94,7 +108,8 @@ class RepositoryImplAssignedIdEntityTest {
         updatedEntity.id = entity.id;
         updatedEntity.dateField = LocalDate.of(2016, Month.JULY, 5);
         updatedEntity.intField = 12;
-        repository.update(updatedEntity);
+        boolean updated = repository.update(updatedEntity);
+        assertThat(updated).isTrue();
 
         AssignedIdEntity result = repository.get(entity.id).orElseThrow();
         assertThat(result).usingRecursiveComparison().isEqualTo(updatedEntity);
@@ -110,7 +125,8 @@ class RepositoryImplAssignedIdEntityTest {
         updatedEntity.id = entity.id;
         updatedEntity.stringField = "updated";
         updatedEntity.dateField = LocalDate.of(2016, Month.JULY, 5);
-        repository.partialUpdate(updatedEntity);
+        boolean updated = repository.partialUpdate(updatedEntity);
+        assertThat(updated).isTrue();
 
         AssignedIdEntity result = repository.get(entity.id).orElseThrow();
         assertThat(result.stringField).isEqualTo(updatedEntity.stringField);
@@ -184,6 +200,26 @@ class RepositoryImplAssignedIdEntityTest {
     }
 
     @Test
+    void batchUpsert() {
+        List<AssignedIdEntity> entities = Lists.newArrayList();
+        for (int i = 0; i < 5; i++) {
+            AssignedIdEntity entity = entity(String.valueOf(i), "value" + i, 10 + i);
+            entities.add(entity);
+        }
+        boolean[] inserts = repository.batchUpsert(entities);
+        assertThat(repository.get("0")).get().usingRecursiveComparison().isEqualTo(entities.get(0));
+        assertThat(repository.get("4")).get().usingRecursiveComparison().isEqualTo(entities.get(4));
+        assertThat(inserts).containsExactly(true, true, true, true, true);
+
+        entities.get(0).intField = 2;
+        entities.get(4).intField = 2;
+        repository.batchUpsert(entities);
+        // due to HSQL doesn't support MySQL's useAffectedRows behavior, upsert always return true
+        assertThat(repository.get("0")).get().usingRecursiveComparison().isEqualTo(entities.get(0));
+        assertThat(repository.get("4")).get().usingRecursiveComparison().isEqualTo(entities.get(4));
+    }
+
+    @Test
     void batchDelete() {
         List<AssignedIdEntity> entities = Lists.newArrayList();
         for (int i = 100; i < 200; i++) {
@@ -192,7 +228,8 @@ class RepositoryImplAssignedIdEntityTest {
         }
         repository.batchInsert(entities);
 
-        repository.batchDelete(entities.stream().map(entity -> entity.id).collect(Collectors.toList()));
+        boolean[] results = repository.batchDelete(entities.stream().map(entity -> entity.id).collect(Collectors.toList()));
+        assertThat(results).hasSize(100).doesNotContain(false);
 
         assertThat(repository.get(entities.get(0).id)).isNotPresent();
         assertThat(repository.get(entities.get(1).id)).isNotPresent();
