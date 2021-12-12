@@ -1,5 +1,12 @@
 ## Change Log In Wonder
 
+### 1.1.3 (12/13/2021)
+
+* es: support ElasticSearch API keys
+> refer to https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/_other_authentication_methods.html#_elasticsearch_api_keys
+* log-processor: add ElasticSearch API keys optional config
+* monitor: add ElasticSearch API keys optional config
+
 ### 1.1.2 (12/13/2021)
 
 * corresponds to upstream version **7.8.2**.
