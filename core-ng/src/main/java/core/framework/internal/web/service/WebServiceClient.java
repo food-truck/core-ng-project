@@ -121,11 +121,11 @@ public class WebServiceClient {
         if (actionLog == null) return;  // web service client may be used without action log context
 
         headers.put(HTTPHandler.HEADER_CORRELATION_ID.toString(), actionLog.correlationId());
-        if (actionLog.trace != Trace.NONE) headers.put(HTTPHandler.HEADER_TRACE.toString(), actionLog.trace.name());
+        if (actionLog.trace == Trace.CASCADE) headers.put(HTTPHandler.HEADER_TRACE.toString(), actionLog.trace.name());
         headers.put(HTTPHandler.HEADER_REF_ID.toString(), actionLog.id);
 
         long timeout = ((HTTPClientImpl) httpClient).timeoutInNano; // not count connect timeout, as action starts after connecting
-        if (actionLog.maxProcessTimeInNano != -1) {                 // only action initiated by http/message has max process time
+        if (actionLog.maxProcessTimeInNano != -1) {                 // not all types of action has max process time
             long remainingTime = actionLog.remainingProcessTimeInNano();
             if (remainingTime < timeout) timeout = remainingTime;
         }
