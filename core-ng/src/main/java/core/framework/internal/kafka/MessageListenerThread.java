@@ -3,6 +3,7 @@ package core.framework.internal.kafka;
 import core.framework.internal.json.JSONReader;
 import core.framework.internal.log.ActionLog;
 import core.framework.internal.log.LogManager;
+import core.framework.internal.log.Trace;
 import core.framework.internal.log.filter.BytesLogParam;
 import core.framework.kafka.Message;
 import core.framework.util.Sets;
@@ -19,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -39,12 +41,13 @@ class MessageListenerThread extends Thread {
     private final long longConsumerDelayThresholdInNano;
 
     private final Object lock = new Object();
-    private Consumer<byte[], byte[]> consumer;
+    private final Consumer<byte[], byte[]> consumer;
 
     private volatile boolean processing;
 
-    MessageListenerThread(String name, MessageListener listener) {
+    MessageListenerThread(String name, Consumer<byte[], byte[]> consumer, MessageListener listener) {
         super(name);
+        this.consumer = consumer;
         this.listener = listener;
         logManager = listener.logManager;
         maxProcessTimeInNano = listener.maxProcessTime.toNanos();
@@ -55,10 +58,7 @@ class MessageListenerThread extends Thread {
     public void run() {
         try {
             processing = true;
-            consumer = listener.createConsumer();
-            if (consumer != null) { // consumer can be null if host is not resolved before shutdown
-                process();
-            }
+            process();
         } finally {
             processing = false;
             synchronized (lock) {
@@ -86,13 +86,9 @@ class MessageListenerThread extends Thread {
     }
 
     void shutdown() {
-        if (consumer == null) {
-            interrupt();    // interrupt listener.createConsumer() if needed
-        } else {
-            // if consumer != null, interrupt() will interrupt consumer coordinator,
-            // the only downside of not calling interrupt() is if thread is at process->exception->sleepRoughly, shutdown will have to wait until sleep ends
-            consumer.wakeup();
-        }
+        // interrupt() will interrupt consumer coordinator,
+        // the only downside of not calling interrupt() is if thread is at process->exception->sleepRoughly, shutdown will have to wait until sleep ends
+        consumer.wakeup();
     }
 
     void awaitTermination(long timeoutInMs) throws InterruptedException {
@@ -140,31 +136,29 @@ class MessageListenerThread extends Thread {
         for (ConsumerRecord<byte[], byte[]> record : records) {
             ActionLog actionLog = logManager.begin("=== message handling begin ===", null);
             try {
-                actionLog.action("topic:" + topic);
-                actionLog.context("topic", topic);
-                actionLog.context("handler", process.handler.getClass().getCanonicalName());
+                initAction(actionLog, topic, process.handler.getClass().getCanonicalName(), maxProcessTimeInNano);
+
                 actionLog.track("kafka", 0, 1, 0);
-                actionLog.maxProcessTime(maxProcessTimeInNano);
 
                 Headers headers = record.headers();
-                if ("true".equals(header(headers, MessageHeaders.HEADER_TRACE))) actionLog.trace = true;
+                String trace = header(headers, MessageHeaders.HEADER_TRACE);
+                if (trace != null) actionLog.trace = Trace.parse(trace);
                 String correlationId = header(headers, MessageHeaders.HEADER_CORRELATION_ID);
                 if (correlationId != null) actionLog.correlationIds = List.of(correlationId);
                 String client = header(headers, MessageHeaders.HEADER_CLIENT);
                 if (client != null) actionLog.clients = List.of(client);
                 String refId = header(headers, MessageHeaders.HEADER_REF_ID);
                 if (refId != null) actionLog.refIds = List.of(refId);
-                logger.debug("[header] refId={}, client={}, correlationId={}", refId, client, correlationId);
+                logger.debug("[header] refId={}, client={}, correlationId={}, trace={}", refId, client, correlationId, trace);
 
                 String key = key(record);
-                actionLog.context("key", key);
+                actionLog.context.put("key", Collections.singletonList(key)); // key can be null
 
                 long timestamp = record.timestamp();
-                logger.debug("[message] timestamp={}", timestamp);
                 checkConsumerDelay(actionLog, timestamp, longConsumerDelayThresholdInNano);
 
                 byte[] value = record.value();
-                logger.debug("[message] value={}", new BytesLogParam(value));
+                logger.debug("[message] key={}, value={}, timestamp={}", key, new BytesLogParam(value), timestamp);
                 T message = process.reader.fromJSON(value);
                 process.validator.validate(message, false);
                 process.handler.handle(key, message);
@@ -179,10 +173,7 @@ class MessageListenerThread extends Thread {
     <T> void handleBulk(String topic, MessageProcess<T> process, List<ConsumerRecord<byte[], byte[]>> records, long maxProcessTimeInNano) {
         ActionLog actionLog = logManager.begin("=== message handling begin ===", null);
         try {
-            actionLog.action("topic:" + topic);
-            actionLog.context("topic", topic);
-            actionLog.context("handler", process.bulkHandler.getClass().getCanonicalName());
-            actionLog.maxProcessTime(maxProcessTimeInNano);
+            initAction(actionLog, topic, process.bulkHandler.getClass().getCanonicalName(), maxProcessTimeInNano);
 
             List<Message<T>> messages = messages(records, actionLog, process.reader);
             for (Message<T> message : messages) {   // validate after fromJSON, so it can track refId/correlationId
@@ -197,6 +188,14 @@ class MessageListenerThread extends Thread {
         }
     }
 
+    private void initAction(ActionLog actionLog, String topic, String handler, long maxProcessTimeInNano) {
+        actionLog.action("topic:" + topic);
+        actionLog.context.put("topic", List.of(topic));
+        actionLog.context.put("handler", List.of(handler));
+        logger.debug("topic={}, handler={}", topic, handler);
+        actionLog.maxProcessTime(maxProcessTimeInNano);
+    }
+
     <T> List<Message<T>> messages(List<ConsumerRecord<byte[], byte[]>> records, ActionLog actionLog, JSONReader<T> reader) throws IOException {
         int size = records.size();
         actionLog.track("kafka", 0, size, 0);
@@ -209,7 +208,8 @@ class MessageListenerThread extends Thread {
 
         for (ConsumerRecord<byte[], byte[]> record : records) {
             Headers headers = record.headers();
-            if ("true".equals(header(headers, MessageHeaders.HEADER_TRACE))) actionLog.trace = true;    // trigger trace if any message is trace
+            String trace = header(headers, MessageHeaders.HEADER_TRACE);
+            if (trace != null) actionLog.trace = Trace.parse(trace);   // trigger trace if any message is trace
             String correlationId = header(headers, MessageHeaders.HEADER_CORRELATION_ID);
             if (correlationId != null) correlationIds.add(correlationId);
             String client = header(headers, MessageHeaders.HEADER_CLIENT);
@@ -222,15 +222,15 @@ class MessageListenerThread extends Thread {
 
             byte[] value = record.value();
             long timestamp = record.timestamp();
-            logger.debug("[message] key={}, value={}, timestamp={}, refId={}, client={}, correlationId={}",
-                    key, new BytesLogParam(value), timestamp, refId, client, correlationId);
+            logger.debug("[message] key={}, value={}, timestamp={}, refId={}, client={}, correlationId={}, trace={}",
+                key, new BytesLogParam(value), timestamp, refId, client, correlationId, trace);
 
             if (minTimestamp > timestamp) minTimestamp = timestamp;
 
             T message = reader.fromJSON(value);
             messages.add(new Message<>(key, message));
         }
-        actionLog.context("key", keys.toArray());
+        actionLog.context.put("key", new ArrayList<>(keys));    // keys could contain null
 
         if (!correlationIds.isEmpty()) actionLog.correlationIds = List.copyOf(correlationIds);  // action log kafka appender doesn't send headers
         if (!clients.isEmpty()) actionLog.clients = List.copyOf(clients);

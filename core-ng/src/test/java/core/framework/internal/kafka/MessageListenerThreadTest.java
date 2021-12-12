@@ -8,6 +8,7 @@ import core.framework.kafka.BulkMessageHandler;
 import core.framework.kafka.Message;
 import core.framework.kafka.MessageHandler;
 import core.framework.util.Strings;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -33,6 +35,8 @@ class MessageListenerThreadTest {
     @Mock
     MessageHandler<TestMessage> messageHandler;
     @Mock
+    Consumer<byte[], byte[]> consumer;
+    @Mock
     BulkMessageHandler<TestMessage> bulkMessageHandler;
     private MessageListenerThread thread;
     private LogManager logManager;
@@ -40,7 +44,7 @@ class MessageListenerThreadTest {
     @BeforeEach
     void createKafkaMessageListenerThread() {
         logManager = new LogManager();
-        thread = new MessageListenerThread("listener-thread-1", new MessageListener(null, null, logManager));
+        thread = new MessageListenerThread("listener-thread-1", consumer, new MessageListener(null, null, logManager));
     }
 
     @Test
@@ -111,6 +115,19 @@ class MessageListenerThreadTest {
     }
 
     @Test
+    void handleWithNullKey() throws Exception {
+        var message = new TestMessage();
+        message.stringField = "value";
+        var record = new ConsumerRecord<>("topic", 0, 0, (byte[]) null, Strings.bytes(JSON.toJSON(message)));
+        record.headers().add(MessageHeaders.HEADER_TRACE, Strings.bytes("true"));
+        record.headers().add(MessageHeaders.HEADER_CLIENT, Strings.bytes("client"));
+        record.headers().add(MessageHeaders.HEADER_TRACE, Strings.bytes("cascade"));
+        thread.handle("topic", new MessageProcess<>(messageHandler, null, TestMessage.class), List.of(record), Duration.ofHours(1).toNanos());
+
+        verify(messageHandler).handle(isNull(), argThat(value -> "value".equals(value.stringField)));
+    }
+
+    @Test
     void handleBulk() throws Exception {
         var key = "key";
         var message = new TestMessage();
@@ -123,5 +140,11 @@ class MessageListenerThreadTest {
         verify(bulkMessageHandler).handle(argThat(value -> value.size() == 1
                                                            && key.equals(value.get(0).key)
                                                            && "value".equals(value.get(0).value.stringField)));
+    }
+
+    @Test
+    void shutdown() {
+        thread.shutdown();
+        verify(consumer).wakeup();
     }
 }

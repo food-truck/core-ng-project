@@ -1,5 +1,32 @@
 ## Change log
 
+### 7.9.2 (11/03/2021 - 11/22/2021)
+
+* db: validate timestamp param must be after 1970-01-01 00:00:01
+  > with insert ignore, out of range timestamp param will be converted to "0000-00-00 00:00:00" into db, and will trigger "Zero date value prohibited" error on read
+  > refer to https://dev.mysql.com/doc/refman/8.0/en/insert.html
+  > Data conversions that would trigger errors abort the statement if IGNORE is not specified. With IGNORE, invalid values are adjusted to the closest values and inserted; warnings are produced but the statement does not abort.
+  > current we only check > 0, make trade off between validating TIMESTAMP column type and keeping compatible with DATETIME column type
+  > most likely the values we deal with from external systems are lesser (e.g. nodejs default year is 1900, it converts 0 into 1900/01/01 00:00:00)
+  > if it passes timestamp after 2038-01-19 03:14:07 (Instant.ofEpochSecond(Integer.MAX_VALUE)), it will still trigger this issue on MySQL
+  > so on application level, if you can not ensure the range of input value, write your own utils to check before assigning
+* jre: 17.0.1 released, published "neowu/jre:17.0.1"
+* app: added external dependency checking before startup
+  > it currently checks kafka, redis/cache, mongo, es to be ready (not db, generally we use managed db service created before kube cluster)
+  > in kube env, during node upgrading or provision, app pods usually start faster than kafka/redis/other stateful set (e.g. one common issue we see is that scheduler job failed to send kafka message)
+  > by this way, app pods will wait until external dependencies ready, it will fail to start if not ready in 30s
+  > log kafka appender still treat log-kafka as optional
+  > for es, it checks http://es:9200/_cluster/health?local=true
+* http: Request.hostName() renamed to Request.hostname() to keep consistent with other places  !!! breaking change but easy to fix
+* action: replaced ActionLogContext.trace() to ActionLogContext.triggerTrace(boolean cascade)
+  > for audit context, we may not want to trace all correlated actions, with this way we can tweak the scope of tracing
+* app: startupHooks introduced 2 stages (initialize and start), removed lazy init for kafka producer / elasticsearch / mongo
+  > since client initialize() will be called during startup, it removes lazy init to simplify
+  > if you want to call Mongo/ElasticSearch directly (e.g. local arbitrary main method), call initialize() before using
+* log-processor: removed elasticsearch appender support
+  > in prod env, we use null log appender for log-processor, since log-processor is stable, and not necessary to double the amount of action logs in log-es
+  > if anything wrong happened, error output of log-processor is good enough for troubleshooting
+
 ### 7.9.1 (10/22/2021 - 11/03/2021)
 
 * site: StaticDirectoryController will normalize path before serving the requested file, to prevent controller serving files outside content directory
