@@ -1,9 +1,30 @@
 ## Change log
 
+### 7.9.0 (09/29/2021 - 10/21/2021)  !!! only support java 17
+
+* jdk: updated to JDK 17
+  > for local env, it's easier to use intellij builtin way to download SDK, or go to https://adoptium.net/
+  > adoptium (renamed from adoptopenjdk) doesn't provide JRE docker image anymore, you should build for yourself (or use JDK one if you don't mind image size)
+  > refer to docker/jre folder, here it has slimmed jre image for generic core-ng app
+* message: make Message.get() more tolerable, won't fail but log as error if key is missing or language is null
+  > use first language defined in site().message() if language is null
+  > return key and log error if message key is missing,
+  > with integration test context, still throw error if key is missing, to make message unit test easier to write
+* http: update undertow to 2.2.12
+* actionLog: added ActionLogContext.trace() to trigger trace log
+  > e.g. to integrate with external services, we want to track all the request/response for critical actions
+  > recommended way is to use log-processor forward all action log messages to application kafka
+  > then to create audit-service, consume the action log messages, save trace to designated location (Cloud Storage Service)
+* action: removed ActionLogContext.remainingProcessTime(), and httpClient retryInterceptor won't consider actionLog.remainingProcessTimeInNano
+  > it's not feasible to adapt time left before making external call (most likely http call with timeout),
+  > due to http call is out of control (e.g. take long to create connection with external site), or external sdk/client not managed by framework
+  > so it's better to careful plan in advance for sync chained http calls
+  > maxProcessTime mechanism will be mainly used for measurement/visibility purpose (alert if one action took too long, close to maxProcessTime)
+
 ### 7.8.2 (09/20/2021 - 09/28/2021)
 
-* java: target to Java 16,
-  > since all projects are on java 16 for long time, this should not be issue, will update to java 17 LTS, once adoptopenjdk released java 17 build
+* java: target to Java 16
+  > since all projects are on java 16 for long time, this should not be issue, will update to java 17 LTS soon
 * kafka: update client to 3.0.0
 * es: update to 7.15.0
 * db: added "boolean partialUpdate(T entity, String where, Object... params)" on Repository, to support updating with optimistic lock

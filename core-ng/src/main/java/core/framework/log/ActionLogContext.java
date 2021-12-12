@@ -4,7 +4,6 @@ import core.framework.internal.log.ActionLog;
 import core.framework.internal.log.LogManager;
 
 import javax.annotation.Nullable;
-import java.time.Duration;
 import java.util.List;
 
 /**
@@ -52,10 +51,10 @@ public final class ActionLogContext {
         return actionLog.track(operation, elapsed, readEntries, writeEntries);
     }
 
-    @Nullable
-    public static Duration remainingProcessTime() {
+    public static void trace() {
         ActionLog actionLog = LogManager.CURRENT_ACTION_LOG.get();
-        if (actionLog == null) return null;
-        return Duration.ofNanos(actionLog.remainingProcessTimeInNano());
+        if (actionLog != null) {
+            actionLog.trace = true;
+        }
     }
 }
