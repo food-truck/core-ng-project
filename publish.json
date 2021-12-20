@@ -39,6 +39,11 @@
       "name": "core-ng-search-test",
       "artifactId": "core-ng-search-test",
       "version": "1.2.3"
+    },
+    {
+      "name": "core-ng-test",
+      "artifactId": "core-ng-test",
+      "version": "1.2.3"
     }
   ]
 }
