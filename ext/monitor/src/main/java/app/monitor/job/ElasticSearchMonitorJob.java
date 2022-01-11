@@ -22,7 +22,7 @@ public class ElasticSearchMonitorJob implements Job {
     private final String app;
     private final String host;
     private final double highHeapUsageThreshold;
-    public final double highDiskUsageThreshold;
+    private final double highDiskUsageThreshold;
     private final Map<String, GCStat> gcStats = Maps.newHashMapWithExpectedSize(2);
 
     public ElasticSearchMonitorJob(ElasticSearchClient elasticSearchClient, String app, MonitorConfig.ElasticSearchConfig config, MessagePublisher<StatMessage> publisher) {
