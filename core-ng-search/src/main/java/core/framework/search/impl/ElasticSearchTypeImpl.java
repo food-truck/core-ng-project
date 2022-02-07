@@ -17,6 +17,7 @@ import core.framework.search.GetRequest;
 import core.framework.search.Index;
 import core.framework.search.IndexRequest;
 import core.framework.search.IndexWithRoutingRequest;
+import core.framework.search.ScoredSearchResponse;
 import core.framework.search.SearchException;
 import core.framework.search.SearchRequest;
 import core.framework.search.SearchResponse;
@@ -76,6 +77,7 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
     private final JSONReader<T> reader;
     private final JSONWriter<T> writer;
     private final Validator<T> validator;
+    private final ElasticSearchTypeImplExtension<T> extension;
 
     ElasticSearchTypeImpl(ElasticSearchImpl elasticSearch, Class<T> documentClass) {
         this.elasticSearch = elasticSearch;
@@ -85,6 +87,7 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
         reader = JSONMapper.reader(documentClass);
         writer = JSONMapper.writer(documentClass);
         validator = Validator.of(documentClass);
+        this.extension = new ElasticSearchTypeImplExtension<>(this.index, this.slowOperationThresholdInNanos, reader, writer, validator, elasticSearch);
     }
 
     @Override
@@ -124,6 +127,11 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
         org.elasticsearch.action.search.SearchResponse response = elasticSearch.client().search(searchRequest, RequestOptions.DEFAULT);
         if (response.getFailedShards() > 0) logger.warn("elasticsearch shards failed, response={}", response);
         return response;
+    }
+
+    @Override
+    public ScoredSearchResponse<T> scoredSearch(SearchRequest request) {
+        return extension.scoredSearch(request);
     }
 
     private SearchResponse<T> searchResponse(org.elasticsearch.action.search.SearchResponse response) throws IOException {
@@ -217,21 +225,7 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
 
     @Override
     public void indexWithRouting(IndexWithRoutingRequest<T> request) {
-        var watch = new StopWatch();
-        String index = request.index == null ? this.index : request.index;
-        validator.validate(request.source, false);
-        byte[] document = writer.toJSON(request.source);
-        try {
-            var indexRequest = new org.elasticsearch.action.index.IndexRequest(index).routing(request.routing).id(request.id).source(document, XContentType.JSON);
-            elasticSearch.client().index(indexRequest, RequestOptions.DEFAULT);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        } finally {
-            long elapsed = watch.elapsed();
-            ActionLogContext.track("elasticsearch", elapsed, 0, 1);
-            logger.debug("index, index={}, id={}, routing={}, elapsed={}", index, request.id, request.routing, elapsed);
-            checkSlowOperation(elapsed);
-        }
+        extension.indexWithRouting(request);
     }
 
     @Override
@@ -264,31 +258,7 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
 
     @Override
     public void bulkIndexWithRouting(BulkIndexWithRoutingRequest<T> request) {
-        var watch = new StopWatch();
-        if (request.requests == null || request.requests.isEmpty()) throw new Error("request.sources must not be empty");
-        String index = request.index == null ? this.index : request.index;
-        var bulkRequest = new BulkRequest();
-        for (Map.Entry<String, BulkIndexWithRoutingRequest.Request<T>> entry : request.requests.entrySet()) {
-            String id = entry.getKey();
-            T source = entry.getValue().source;
-            String routing = entry.getValue().routing;
-            validator.validate(source, false);
-            var indexRequest = new org.elasticsearch.action.index.IndexRequest(index).id(id).routing(routing).source(writer.toJSON(source), XContentType.JSON);
-            bulkRequest.add(indexRequest);
-        }
-        long esTook = 0;
-        try {
-            BulkResponse response = elasticSearch.client().bulk(bulkRequest, RequestOptions.DEFAULT);
-            esTook = response.getTook().nanos();
-            if (response.hasFailures()) throw new SearchException(response.buildFailureMessage());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        } finally {
-            long elapsed = watch.elapsed();
-            ActionLogContext.track("elasticsearch", elapsed, 0, request.requests.size());
-            logger.debug("bulkIndex, index={}, size={}, esTook={}, elapsed={}", index, request.requests.size(), esTook, elapsed);
-            checkSlowOperation(elapsed);
-        }
+        extension.bulkIndexWithRouting(request);
     }
 
     @Override
