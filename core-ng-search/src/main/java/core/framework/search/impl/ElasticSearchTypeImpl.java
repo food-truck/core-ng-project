@@ -6,6 +6,7 @@ import core.framework.internal.json.JSONWriter;
 import core.framework.internal.validate.Validator;
 import core.framework.log.ActionLogContext;
 import core.framework.search.AnalyzeRequest;
+import core.framework.search.AnalyzeTokens;
 import core.framework.search.BulkDeleteRequest;
 import core.framework.search.BulkIndexRequest;
 import core.framework.search.BulkIndexWithRoutingRequest;
@@ -343,6 +344,11 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
             logger.debug("analyze, index={}, analyzer={}, elapsed={}", index, request.analyzer, elapsed);
             checkSlowOperation(elapsed);
         }
+    }
+
+    @Override
+    public AnalyzeTokens detailedAnalyze(AnalyzeRequest request) {
+        return this.extension.detailedAnalyze(request);
     }
 
     @Override

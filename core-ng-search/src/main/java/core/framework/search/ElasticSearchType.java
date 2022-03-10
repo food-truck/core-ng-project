@@ -100,5 +100,14 @@ public interface ElasticSearchType<T> {
         return analyze(request);
     }
 
+    AnalyzeTokens detailedAnalyze(AnalyzeRequest request);
+
+    default AnalyzeTokens detailedAnalyze(String analyzer, String text) {
+        AnalyzeRequest request = new AnalyzeRequest();
+        request.analyzer = analyzer;
+        request.text = text;
+        return detailedAnalyze(request);
+    }
+
     void forEach(ForEach<T> forEach);
 }

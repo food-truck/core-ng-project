@@ -2,6 +2,7 @@ package core.framework.search.impl;
 
 import core.framework.inject.Inject;
 import core.framework.json.JSON;
+import core.framework.search.AnalyzeTokens;
 import core.framework.search.ClusterStateResponse;
 import core.framework.search.ElasticSearch;
 import core.framework.search.ElasticSearchType;
@@ -186,6 +187,13 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     @Test
     void analyze() {
         List<String> tokens = documentType.analyze("standard", "word1 word2");
+        assertThat(tokens).contains("word1", "word2");
+    }
+
+    @Test
+    void detailedAnalyze(){
+        AnalyzeTokens analyzeTokens = documentType.detailedAnalyze("standard", "word1 word2");
+        List<String> tokens = analyzeTokens.tokens.stream().map(token -> token.term).collect(Collectors.toList());
         assertThat(tokens).contains("word1", "word2");
     }
 

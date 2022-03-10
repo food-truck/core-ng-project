@@ -4,6 +4,8 @@ import core.framework.internal.json.JSONReader;
 import core.framework.internal.json.JSONWriter;
 import core.framework.internal.validate.Validator;
 import core.framework.log.ActionLogContext;
+import core.framework.search.AnalyzeRequest;
+import core.framework.search.AnalyzeTokens;
 import core.framework.search.BulkIndexWithRoutingRequest;
 import core.framework.search.IndexWithRoutingRequest;
 import core.framework.search.ScoredSearchResponse;
@@ -15,6 +17,7 @@ import org.apache.lucene.search.TotalHits;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.indices.AnalyzeResponse;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.search.SearchHit;
@@ -30,6 +33,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static core.framework.log.Markers.errorCode;
 import static org.elasticsearch.client.Requests.searchRequest;
@@ -135,6 +139,25 @@ public final class ElasticSearchTypeImplExtension<T> {
         }
     }
 
+    public AnalyzeTokens detailedAnalyze(AnalyzeRequest request) {
+        var watch = new StopWatch();
+        String index = request.index == null ? this.index : request.index;
+        try {
+            var analyzeRequest = org.elasticsearch.client.indices.AnalyzeRequest.withIndexAnalyzer(index, request.analyzer, request.text);
+            AnalyzeResponse response = elasticSearch.client().indices().analyze(analyzeRequest, RequestOptions.DEFAULT);
+            var analyzeTokens = new AnalyzeTokens();
+            analyzeTokens.tokens = response.getTokens().stream().map(this::token).collect(Collectors.toList());
+            return analyzeTokens;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } finally {
+            long elapsed = watch.elapsed();
+            ActionLogContext.track("elasticsearch", elapsed);
+            logger.debug("analyze, index={}, analyzer={}, elapsed={}", index, request.analyzer, elapsed);
+            checkSlowOperation(elapsed);
+        }
+    }
+
     private ScoredSearchResponse<T> scoredSearchResponse(org.elasticsearch.action.search.SearchResponse response) throws IOException {
         SearchHit[] hits = response.getHits().getHits();
         List<ScoredSearchResponse.ScoredHit<T>> items = new ArrayList<>(hits.length);
@@ -170,5 +193,15 @@ public final class ElasticSearchTypeImplExtension<T> {
         if (elapsed > slowOperationThresholdInNanos) {
             logger.warn(errorCode("SLOW_ES"), "slow elasticsearch operation, elapsed={}", Duration.ofNanos(elapsed));
         }
+    }
+
+    private AnalyzeTokens.Token token(AnalyzeResponse.AnalyzeToken analyzeToken) {
+        var token = new AnalyzeTokens.Token();
+        token.term = analyzeToken.getTerm();
+        token.startOffset = analyzeToken.getStartOffset();
+        token.endOffset = analyzeToken.getEndOffset();
+        token.type = analyzeToken.getType();
+        token.position = analyzeToken.getPosition();
+        return token;
     }
 }
