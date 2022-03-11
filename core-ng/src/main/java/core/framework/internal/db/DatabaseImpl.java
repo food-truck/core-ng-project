@@ -7,8 +7,9 @@ import core.framework.db.IsolationLevel;
 import core.framework.db.Repository;
 import core.framework.db.Transaction;
 import core.framework.db.UncheckedSQLException;
+import core.framework.internal.log.ActionLog;
+import core.framework.internal.log.LogManager;
 import core.framework.internal.resource.Pool;
-import core.framework.log.ActionLogContext;
 import core.framework.util.ASCII;
 import core.framework.util.StopWatch;
 import org.slf4j.Logger;
@@ -18,11 +19,11 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +48,7 @@ public final class DatabaseImpl implements Database {
     private final Map<Class<?>, RowMapper<?>> rowMappers = new HashMap<>(32);
     public String user;
     public String password;
-    public int maxOperations = 5000;  // max db calls per action, if exceeds, it indicates either wrong impl (e.g. infinite loop with db calls) or bad practice (not CD friend), better split into multiple actions
+    public int maxOperations = 5000;  // max db calls per action, if exceeds, it indicates either wrong impl (e.g. infinite loop with db calls) or bad practice (not CD friendly), better split into multiple actions
     public int tooManyRowsReturnedThreshold = 1000;
     public long slowOperationThresholdInNanos = Duration.ofSeconds(5).toNanos();
     public IsolationLevel isolationLevel;
@@ -107,6 +108,13 @@ public final class DatabaseImpl implements Database {
             // refer to https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-configuration-properties.html
             properties.setProperty(PropertyKey.connectTimeout.getKeyName(), timeoutValue);
             properties.setProperty(PropertyKey.socketTimeout.getKeyName(), timeoutValue);
+            // refer to https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-connp-props-connection.html#cj-conn-prop_useAffectedRows
+            // Don't set the CLIENT_FOUND_ROWS flag when connecting to the server (not JDBC-compliant, will break most applications that rely on "found" rows vs. "affected rows" for DML statements),
+            // but does cause "correct" update counts from "INSERT ... ON DUPLICATE KEY UPDATE" statements to be returned by the server.
+            properties.setProperty(PropertyKey.useAffectedRows.getKeyName(), "true");
+            // refer to com.mysql.cj.protocol.a.NativeProtocol.configureTimeZone,
+            // force to UTC, generally on cloud it defaults to UTC, this setting is to make local match cloud
+            properties.setProperty(PropertyKey.connectionTimeZone.getKeyName(), "UTC");
             properties.setProperty(PropertyKey.rewriteBatchedStatements.getKeyName(), "true");
             properties.setProperty(PropertyKey.queryInterceptors.getKeyName(), MySQLQueryInterceptor.class.getName());
             properties.setProperty(PropertyKey.logger.getKeyName(), "Slf4JLogger");
@@ -193,10 +201,9 @@ public final class DatabaseImpl implements Database {
             return results;
         } finally {
             long elapsed = watch.elapsed();
-            int operations = ActionLogContext.track("db", elapsed, returnedRows, 0);
             logger.debug("select, sql={}, params={}, returnedRows={}, elapsed={}", sql, new SQLParams(operation.enumMapper, params), returnedRows, elapsed);
+            track(elapsed, returnedRows, 0, 1);
             checkTooManyRowsReturned(returnedRows); // check returnedRows after sql debug log, to make log easier to read
-            checkOperation(elapsed, operations);
         }
     }
 
@@ -212,9 +219,8 @@ public final class DatabaseImpl implements Database {
             return result;
         } finally {
             long elapsed = watch.elapsed();
-            int operations = ActionLogContext.track("db", elapsed, returnedRows, 0);
             logger.debug("selectOne, sql={}, params={}, returnedRows={}, elapsed={}", sql, new SQLParams(operation.enumMapper, params), returnedRows, elapsed);
-            checkOperation(elapsed, operations);
+            track(elapsed, returnedRows, 0, 1);
         }
     }
 
@@ -222,15 +228,14 @@ public final class DatabaseImpl implements Database {
     public int execute(String sql, Object... params) {
         var watch = new StopWatch();
         validateStringValue(sql);
-        int updatedRows = 0;
+        int affectedRows = 0;
         try {
-            updatedRows = operation.update(sql, params);
-            return updatedRows;
+            affectedRows = operation.update(sql, params);
+            return affectedRows;
         } finally {
             long elapsed = watch.elapsed();
-            int operations = ActionLogContext.track("db", elapsed, 0, updatedRows);
-            logger.debug("execute, sql={}, params={}, updatedRows={}, elapsed={}", sql, new SQLParams(operation.enumMapper, params), updatedRows, elapsed);
-            checkOperation(elapsed, operations);
+            logger.debug("execute, sql={}, params={}, affectedRows={}, elapsed={}", sql, new SQLParams(operation.enumMapper, params), affectedRows, elapsed);
+            track(elapsed, 0, affectedRows, 1);
         }
     }
 
@@ -239,16 +244,21 @@ public final class DatabaseImpl implements Database {
         var watch = new StopWatch();
         validateStringValue(sql);
         if (params.isEmpty()) throw new Error("params must not be empty");
-        int updatedRows = 0;
+        int affectedRows = 0;
         try {
             int[] results = operation.batchUpdate(sql, params);
-            updatedRows = Arrays.stream(results).sum();
+            for (int result : results) {
+                // with batchInsert, mysql returns -2 if insert succeeds, for batch only
+                // refer to com.mysql.cj.jdbc.ClientPreparedStatement.executeBatchedInserts
+                if (result == Statement.SUCCESS_NO_INFO) affectedRows++;
+                if (result > 0) affectedRows += result;
+            }
             return results;
         } finally {
             long elapsed = watch.elapsed();
-            int operations = ActionLogContext.track("db", elapsed, 0, updatedRows);
-            logger.debug("batchExecute, sql={}, params={}, size={}, updatedRows={}, elapsed={}", sql, new SQLBatchParams(operation.enumMapper, params), params.size(), updatedRows, elapsed);
-            checkOperation(elapsed, operations);
+            int size = params.size();
+            logger.debug("batchExecute, sql={}, params={}, size={}, affectedRows={}, elapsed={}", sql, new SQLBatchParams(operation.enumMapper, params), size, affectedRows, elapsed);
+            track(elapsed, 0, affectedRows, size);
         }
     }
 
@@ -274,9 +284,23 @@ public final class DatabaseImpl implements Database {
         }
     }
 
-    void checkOperation(long elapsed, int operations) {
+    void track(long elapsed, int readRows, int writeRows, int queries) {
+        ActionLog actionLog = LogManager.CURRENT_ACTION_LOG.get();
+        if (actionLog != null) {
+            actionLog.stats.compute("db_queries", (k, oldValue) -> (oldValue == null) ? queries : oldValue + queries);
+            int operations = actionLog.track("db", elapsed, readRows, writeRows);
+            checkOperations(actionLog, elapsed, operations);
+        }
+    }
+
+    private void checkOperations(ActionLog actionLog, long elapsed, int operations) {
         if (operations > maxOperations) {
-            throw new Error("too many db operations, operations=" + operations);
+            if (actionLog.remainingProcessTimeInNano() <= 0) {
+                // break if it took long and execute too many db queries
+                throw new Error("too many db operations, operations=" + operations);
+            } else {
+                logger.warn(errorCode("TOO_MANY_DB_OPERATIONS"), "too many db operations, operations={}", operations);
+            }
         }
         if (elapsed > slowOperationThresholdInNanos) {
             logger.warn(errorCode("SLOW_DB"), "slow db operation, elapsed={}", Duration.ofNanos(elapsed));
@@ -294,8 +318,8 @@ public final class DatabaseImpl implements Database {
                 if (ch != ' ') break;   // seek to next non-whitespace
             }
             if (ch == ','
-                    || index == length  // sql ends with *
-                    || index + 4 <= length && ASCII.toUpperCase(ch) == 'F' && "FROM".equals(ASCII.toUpperCase(sql.substring(index, index + 4))))
+                || index == length  // sql ends with *
+                || index + 4 <= length && ASCII.toUpperCase(ch) == 'F' && "FROM".equals(ASCII.toUpperCase(sql.substring(index, index + 4))))
                 throw new Error("sql must not contain wildcard(*), please only select columns needed, sql=" + sql);
             index = sql.indexOf('*', index + 1);
         }

@@ -1,5 +1,119 @@
 ## Change Log In Wonder
 
+### 1.2.3 (12/13/2021)
+
+# corresponds to upstream version **7.9.3**.
+* monitor: improve kube pod monitor error message for "Unschedulable" condition
+* action: fixed webserviceClient/messagePublisher/executor only pass trace header when trace = cascade
+* action: redesigned maxProcessTime behavior, use http client timeout and shutdown time out as benchmark
+  > for executor task actions, use SHUTDOWN_TIMEOUT as maxProcessTime
+  > for kafka listener, use SHUTDOWN_TIMEOUT as maxProcessTime for each message handling (just for warning purpose), ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG is still 30min
+  > for http handler, use request timeout header or HTTPConfig.maxProcessTime(), (default to 30s)
+  > for scheduler job, use 10s, scheduler job should be fast, generally just sending kafka message
+* db: updated "too many db operations" check
+  > if within maxProcessTime, it logs warning with error code TOO_MANY_DB_OPERATIONS, otherwise throws error
+  > not break if critical workload generates massive db operations, and still protect from infinite loop by mistake
+* db: added stats.db_queries to track how many db queries (batch operation counts as 1 perf_stats.db operation)
+  > log-processor / kibana.json is updated with new diagram
+
+### 1.2.2 (12/13/2021)
+
+* corresponds to upstream version **7.9.2**.
+* db: validate timestamp param must be after 1970-01-01 00:00:01
+  > with insert ignore, out of range timestamp param will be converted to "0000-00-00 00:00:00" into db, and will trigger "Zero date value prohibited" error on read
+  > refer to https://dev.mysql.com/doc/refman/8.0/en/insert.html
+  > Data conversions that would trigger errors abort the statement if IGNORE is not specified. With IGNORE, invalid values are adjusted to the closest values and inserted; warnings are produced but the statement does not abort.
+  > current we only check > 0, make trade off between validating TIMESTAMP column type and keeping compatible with DATETIME column type
+  > most likely the values we deal with from external systems are lesser (e.g. nodejs default year is 1900, it converts 0 into 1900/01/01 00:00:00)
+  > if it passes timestamp after 2038-01-19 03:14:07 (Instant.ofEpochSecond(Integer.MAX_VALUE)), it will still trigger this issue on MySQL
+  > so on application level, if you can not ensure the range of input value, write your own utils to check before assigning
+* jre: 17.0.1 released, published "neowu/jre:17.0.1"
+* app: added external dependency checking before startup
+  > it currently checks kafka, redis/cache, mongo, es to be ready (not db, generally we use managed db service created before kube cluster)
+  > in kube env, during node upgrading or provision, app pods usually start faster than kafka/redis/other stateful set (e.g. one common issue we see is that scheduler job failed to send kafka message)
+  > by this way, app pods will wait until external dependencies ready, it will fail to start if not ready in 30s
+  > log kafka appender still treat log-kafka as optional
+  > for es, it checks http://es:9200/_cluster/health?local=true
+* http: Request.hostName() renamed to Request.hostname() to keep consistent with other places  !!! breaking change but easy to fix
+* action: replaced ActionLogContext.trace() to ActionLogContext.triggerTrace(boolean cascade)
+  > for audit context, we may not want to trace all correlated actions, with this way we can tweak the scope of tracing
+* app: startupHooks introduced 2 stages (initialize and start), removed lazy init for kafka producer / elasticsearch / mongo
+  > since client initialize() will be called during startup, it removes lazy init to simplify
+  > if you want to call Mongo/ElasticSearch directly (e.g. local arbitrary main method), call initialize() before using
+* log-processor: removed elasticsearch appender support
+  > in prod env, we use null log appender for log-processor, since log-processor is stable, and not necessary to double the amount of action logs in log-es
+  > if anything wrong happened, error output of log-processor is good enough for troubleshooting
+
+### 1.2.1 (12/13/2021)
+
+* corresponds to upstream version **7.9.1**.
+* site: StaticDirectoryController will normalize path before serving the requested file, to prevent controller serving files outside content directory
+  > it's not recommended serving static directory or file directly through java webapp,
+  > better use CDN + static bucket or put Nginx in front of java process to server /static
+* db: use useAffectedRows=true on mysql connection, return boolean for update/delete/upsert !!! pls read this carefully
+  > refer to https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-connp-props-connection.html#cj-conn-prop_useAffectedRows
+  > the MySQL affected rows means the row actually changed,
+  > e.g. sql like update table set column = 'value' where id = 'id', the affected row = 0 means either id not found or column value is set to its current values (no row affected)
+  > so if you want to use update with optimistic lock or determine whether id exists, you can make one column always be changed, like set updatedTime = now()
+* db: added Repository.upsert() and Repository.batchUpsert()
+  > upsert is using "insert on duplicate key update", a common use case is data sync
+  > !!! due to HSQL doesn't support MySQL useAffectedRows=true behavior, so upsert always return true
+  > we may create HSQL upsert impl to support unit test if there is need in future (get by id then create or update approach)
+* db: Repository update and delete operations return boolean to indicate whether updated
+  > normally we expect a valid PK when updating by PK, if there is no row updated, framework will log warning,
+  > and the boolean result is used by app code to determine whether break by throwing error
+* db: removed DBConfig.batchSize() configuration
+  > with recent MySQL server and jdbc driver, it is already auto split batch according to max_allowed_packet
+  > refer to com.mysql.cj.AbstractPreparedQuery.computeBatchSize
+  > and MySQL prefers large batch as the default max_allowed_packet value is getting larger
+* db: mysql jdbc driver updated to 8.0.27
+* redis: added Redis.list().trim(key, maxSize)
+  > to make it easier to manage fixed length list in redis
+
+### 1.2.0 (12/13/2021)
+
+* corresponds to upstream version **7.9.0**.
+* jdk: updated to JDK 17
+  > for local env, it's easier to use intellij builtin way to download SDK, or go to https://adoptium.net/
+  > adoptium (renamed from adoptopenjdk) doesn't provide JRE docker image anymore, you should build for yourself (or use JDK one if you don't mind image size)
+  > refer to docker/jre folder, here it has slimmed jre image for generic core-ng app
+* message: make Message.get() more tolerable, won't fail but log as error if key is missing or language is null
+  > use first language defined in site().message() if language is null
+  > return key and log error if message key is missing,
+  > with integration test context, still throw error if key is missing, to make message unit test easier to write
+* http: update undertow to 2.2.12
+* actionLog: added ActionLogContext.trace() to trigger trace log
+  > e.g. to integrate with external services, we want to track all the request/response for critical actions
+  > recommended way is to use log-processor forward all action log messages to application kafka
+  > then to create audit-service, consume the action log messages, save trace to designated location (Cloud Storage Service)
+* action: removed ActionLogContext.remainingProcessTime(), and httpClient retryInterceptor won't consider actionLog.remainingProcessTimeInNano
+  > it's not feasible to adapt time left before making external call (most likely http call with timeout),
+  > due to http call is out of control (e.g. take long to create connection with external site), or external sdk/client not managed by framework
+  > so it's better to careful plan in advance for sync chained http calls
+  > maxProcessTime mechanism will be mainly used for measurement/visibility purpose (alert if one action took too long, close to maxProcessTime)
+
+### 1.1.3 (12/13/2021)
+
+* es: support ElasticSearch API keys
+
+> refer to https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/_other_authentication_methods.html#_elasticsearch_api_keys
+
+* log-processor: add ElasticSearch API keys optional config
+* monitor: add ElasticSearch API keys optional config
+
+### 1.1.2 (12/13/2021)
+
+* corresponds to upstream version **7.8.2**.
+* java: target to Java 16,
+  > since all projects are on java 16 for long time, this should not be issue, will update to java 17 LTS, once adoptopenjdk released java 17 build
+* kafka: update client to 3.0.0
+* es: update to 7.15.0
+* db: added "boolean partialUpdate(T entity, String where, Object... params)" on Repository, to support updating with optimistic lock
+  > to clarify, Repository.update() must be used carefully, since it's update all columns to bean fields, regardless it's null
+  > in actual project, common use cases generally are like to update few columns with id or optimistic lock, so always prefer partialUpdate over update
+  > for accumulated update (like set amount = amount + ?), it's still better use Database.execute() + plain sql
+* db: updated Repository.batchInsertIgnore to return boolean[], to tell exactly whether each entity was inserted successfully
+
 ### 1.1.1 (12/13/2021)
 
 * corresponds to upstream version **7.8.1**.

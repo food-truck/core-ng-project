@@ -49,21 +49,23 @@ public class ElasticSearchImpl implements ElasticSearch {
     public HttpHost[] hosts;
     public String apiKey;
     public int maxResultWindow = 10000;
-    private RestHighLevelClient client;
+    RestHighLevelClient client;
 
-    // initialize will be called in startup hook, so no need to synchronize
+    // initialize will be called in startup hook, no need to synchronize
     public void initialize() {
-        RestClientBuilder builder = RestClient.builder(hosts);
-        if (apiKey != null) {
-            Header[] authHeader = {new BasicHeader("Authorization", "ApiKey " + apiKey)};
-            builder.setDefaultHeaders(authHeader);
+        if (client == null) {   // initialize can be called by initSearch explicitly during test,
+            RestClientBuilder builder = RestClient.builder(hosts);
+            if (apiKey != null) {
+                Header[] authHeader = {new BasicHeader("Authorization", "ApiKey " + apiKey)};
+                builder.setDefaultHeaders(authHeader);
+            }
+            builder.setRequestConfigCallback(config -> config.setSocketTimeout((int) timeout.toMillis())
+                .setConnectionRequestTimeout((int) timeout.toMillis())); // timeout of requesting connection from connection pool
+            builder.setHttpClientConfigCallback(config -> config.setMaxConnTotal(100)
+                .setMaxConnPerRoute(100)
+                .setKeepAliveStrategy((response, context) -> Duration.ofSeconds(30).toMillis()));
+            client = new RestHighLevelClient(builder);
         }
-        builder.setRequestConfigCallback(config -> config.setSocketTimeout((int) timeout.toMillis())
-            .setConnectionRequestTimeout((int) timeout.toMillis())); // timeout of requesting connection from connection pool
-        builder.setHttpClientConfigCallback(config -> config.setMaxConnTotal(100)
-            .setMaxConnPerRoute(100)
-            .setKeepAliveStrategy((response, context) -> Duration.ofSeconds(30).toMillis()));
-        client = new RestHighLevelClient(builder);
     }
 
     public <T> ElasticSearchType<T> type(Class<T> documentClass) {
@@ -88,7 +90,7 @@ public class ElasticSearchImpl implements ElasticSearch {
     public void putIndex(String index, String source) {
         var watch = new StopWatch();
         try {
-            IndicesClient client = client().indices();
+            IndicesClient client = this.client.indices();
             CreateIndexRequest request = new CreateIndexRequest(index).source(new BytesArray(source), XContentType.JSON);
             boolean exists = client.exists(new GetIndexRequest(index), RequestOptions.DEFAULT);
             if (!exists) {
@@ -110,7 +112,7 @@ public class ElasticSearchImpl implements ElasticSearch {
         var watch = new StopWatch();
         try {
             XContentParser parser = XContentType.JSON.xContent().createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, source);
-            client().indices().putIndexTemplate(new PutComposableIndexTemplateRequest().name(name).indexTemplate(ComposableIndexTemplate.parse(parser)), RequestOptions.DEFAULT);
+            client.indices().putIndexTemplate(new PutComposableIndexTemplateRequest().name(name).indexTemplate(ComposableIndexTemplate.parse(parser)), RequestOptions.DEFAULT);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
@@ -122,7 +124,7 @@ public class ElasticSearchImpl implements ElasticSearch {
     public void refreshIndex(String index) {
         var watch = new StopWatch();
         try {
-            client().indices().refresh(Requests.refreshRequest(index), RequestOptions.DEFAULT);
+            client.indices().refresh(Requests.refreshRequest(index), RequestOptions.DEFAULT);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
@@ -134,7 +136,7 @@ public class ElasticSearchImpl implements ElasticSearch {
     public void closeIndex(String index) {
         var watch = new StopWatch();
         try {
-            client().indices().close(new CloseIndexRequest(index).waitForActiveShards(ActiveShardCount.NONE), RequestOptions.DEFAULT);
+            client.indices().close(new CloseIndexRequest(index).waitForActiveShards(ActiveShardCount.NONE), RequestOptions.DEFAULT);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
@@ -146,7 +148,7 @@ public class ElasticSearchImpl implements ElasticSearch {
     public void deleteIndex(String index) {
         var watch = new StopWatch();
         try {
-            client().indices().delete(Requests.deleteIndexRequest(index), RequestOptions.DEFAULT);
+            client.indices().delete(Requests.deleteIndexRequest(index), RequestOptions.DEFAULT);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
@@ -158,7 +160,7 @@ public class ElasticSearchImpl implements ElasticSearch {
     public ClusterStateResponse state() {
         var watch = new StopWatch();
         try {
-            Response response = client().getLowLevelClient().performRequest(new Request("GET", "/_cluster/state/metadata"));
+            Response response = client.getLowLevelClient().performRequest(new Request("GET", "/_cluster/state/metadata"));
             byte[] bytes = responseBody(response.getEntity());
             return JSON.fromJSON(ClusterStateResponse.class, new String(bytes, UTF_8));
         } catch (IOException e) {
@@ -172,10 +174,5 @@ public class ElasticSearchImpl implements ElasticSearch {
         try (InputStream stream = entity.getContent()) {
             return stream.readAllBytes();
         }
-    }
-
-    RestHighLevelClient client() {
-        if (client == null) initialize();
-        return client;
     }
 }

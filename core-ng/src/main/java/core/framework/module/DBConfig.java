@@ -33,7 +33,7 @@ public class DBConfig extends Config {
         this.name = name;
 
         var database = new DatabaseImpl("db" + (name == null ? "" : "-" + name));
-        context.shutdownHook.add(ShutdownHook.STAGE_7, timeout -> database.close());
+        context.shutdownHook.add(ShutdownHook.STAGE_6, timeout -> database.close());
         context.backgroundTask().scheduleWithFixedDelay(database.pool::refresh, Duration.ofMinutes(10));
         context.collector.metrics.add(new PoolMetrics(database.pool));
         context.beanFactory.bind(Database.class, name, database);
@@ -91,10 +91,6 @@ public class DBConfig extends Config {
 
     public void timeout(Duration timeout) {
         database.timeout(timeout);
-    }
-
-    public void batchSize(int size) {
-        database.operation.batchSize = size;
     }
 
     public void view(Class<?> viewClass) {

@@ -83,7 +83,7 @@ public class SessionManager implements SessionContext {
         // share sessionId requires multiple webapps decode session key/values consistently, which adds extra complexity for dev/deployment
         if (header == null && cookieSpec.domain != null)
             return cookieSpec.domain;
-        return request.hostName();
+        return request.hostname();
     }
 
     void putSessionId(Response response, String sessionId) {
@@ -106,6 +106,7 @@ public class SessionManager implements SessionContext {
 
     public void cookie(String name, String domain) {
         if (name == null) throw new Error("name must not be null");
+        // path must be /, refer to https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.2.4
         cookieSpec = new CookieSpec(name).domain(domain).path("/").sessionScope().httpOnly().secure().sameSite();
     }
 
