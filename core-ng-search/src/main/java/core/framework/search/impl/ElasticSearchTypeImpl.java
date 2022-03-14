@@ -6,8 +6,10 @@ import core.framework.internal.json.JSONWriter;
 import core.framework.internal.validate.Validator;
 import core.framework.log.ActionLogContext;
 import core.framework.search.AnalyzeRequest;
+import core.framework.search.AnalyzeTokens;
 import core.framework.search.BulkDeleteRequest;
 import core.framework.search.BulkIndexRequest;
+import core.framework.search.BulkIndexWithRoutingRequest;
 import core.framework.search.CompleteRequest;
 import core.framework.search.DeleteRequest;
 import core.framework.search.ElasticSearchType;
@@ -15,6 +17,8 @@ import core.framework.search.ForEach;
 import core.framework.search.GetRequest;
 import core.framework.search.Index;
 import core.framework.search.IndexRequest;
+import core.framework.search.IndexWithRoutingRequest;
+import core.framework.search.ScoredSearchResponse;
 import core.framework.search.SearchException;
 import core.framework.search.SearchRequest;
 import core.framework.search.SearchResponse;
@@ -74,6 +78,7 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
     private final JSONReader<T> reader;
     private final JSONWriter<T> writer;
     private final Validator<T> validator;
+    private final ElasticSearchTypeImplExtension<T> extension;
 
     ElasticSearchTypeImpl(ElasticSearchImpl elasticSearch, Class<T> documentClass) {
         this.elasticSearch = elasticSearch;
@@ -83,6 +88,7 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
         reader = JSONMapper.reader(documentClass);
         writer = JSONMapper.writer(documentClass);
         validator = Validator.of(documentClass);
+        this.extension = new ElasticSearchTypeImplExtension<>(this.index, this.slowOperationThresholdInNanos, reader, writer, validator, elasticSearch);
     }
 
     @Override
@@ -122,6 +128,11 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
         org.elasticsearch.action.search.SearchResponse response = elasticSearch.client.search(searchRequest, RequestOptions.DEFAULT);
         if (response.getFailedShards() > 0) logger.warn("elasticsearch shards failed, response={}", response);
         return response;
+    }
+
+    @Override
+    public ScoredSearchResponse<T> scoredSearch(SearchRequest request) {
+        return extension.scoredSearch(request);
     }
 
     private SearchResponse<T> searchResponse(org.elasticsearch.action.search.SearchResponse response) throws IOException {
@@ -214,6 +225,11 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
     }
 
     @Override
+    public void indexWithRouting(IndexWithRoutingRequest<T> request) {
+        extension.indexWithRouting(request);
+    }
+
+    @Override
     public void bulkIndex(BulkIndexRequest<T> request) {
         var watch = new StopWatch();
         if (request.sources == null || request.sources.isEmpty()) throw new Error("request.sources must not be empty");
@@ -239,6 +255,11 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
             logger.debug("bulkIndex, index={}, size={}, esTook={}, elapsed={}", index, request.sources.size(), esTook, elapsed);
             checkSlowOperation(elapsed);
         }
+    }
+
+    @Override
+    public void bulkIndexWithRouting(BulkIndexWithRoutingRequest<T> request) {
+        extension.bulkIndexWithRouting(request);
     }
 
     @Override
@@ -323,6 +344,11 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
             logger.debug("analyze, index={}, analyzer={}, elapsed={}", index, request.analyzer, elapsed);
             checkSlowOperation(elapsed);
         }
+    }
+
+    @Override
+    public AnalyzeTokens detailedAnalyze(AnalyzeRequest request) {
+        return this.extension.detailedAnalyze(request);
     }
 
     @Override

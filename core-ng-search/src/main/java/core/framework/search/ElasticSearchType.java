@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface ElasticSearchType<T> {
     SearchResponse<T> search(SearchRequest request);
 
+    ScoredSearchResponse<T> scoredSearch(SearchRequest request);
+
     List<String> complete(CompleteRequest request);
 
     default List<String> complete(String prefix, String... fields) {
@@ -37,12 +39,30 @@ public interface ElasticSearchType<T> {
         index(request);
     }
 
+    void indexWithRouting(IndexWithRoutingRequest<T> request);
+
+    default void indexWithRouting(String id, T source, String routing) {
+        var request = new IndexWithRoutingRequest<T>();
+        request.id = id;
+        request.source = source;
+        request.routing = routing;
+        indexWithRouting(request);
+    }
+
     void bulkIndex(BulkIndexRequest<T> request);
 
     default void bulkIndex(Map<String, T> sources) {
         var request = new BulkIndexRequest<T>();
         request.sources = sources;
         bulkIndex(request);
+    }
+
+    void bulkIndexWithRouting(BulkIndexWithRoutingRequest<T> request);
+
+    default void bulkIndexWithRouting(Map<String, BulkIndexWithRoutingRequest.Request<T>> requests) {
+        var request = new BulkIndexWithRoutingRequest<T>();
+        request.requests = requests;
+        bulkIndexWithRouting(request);
     }
 
     void update(UpdateRequest<T> request);
@@ -78,6 +98,15 @@ public interface ElasticSearchType<T> {
         request.analyzer = analyzer;
         request.text = text;
         return analyze(request);
+    }
+
+    AnalyzeTokens detailedAnalyze(AnalyzeRequest request);
+
+    default AnalyzeTokens detailedAnalyze(String analyzer, String text) {
+        AnalyzeRequest request = new AnalyzeRequest();
+        request.analyzer = analyzer;
+        request.text = text;
+        return detailedAnalyze(request);
     }
 
     void forEach(ForEach<T> forEach);
