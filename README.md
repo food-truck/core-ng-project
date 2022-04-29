@@ -26,7 +26,7 @@ please check [WONDER-CHANGELOG.md](WONDER-CHANGELOG.md) & [CHANGELOG.md](CHANGEL
 
 ## Version update principle
 We will update the version in these cases:
-1. original repo updates its version —— we will update our version according its change. No matter the original repo updates its major, minor or patch version, we will update related version position. 
+1. original repo updates its version —— we will update our version according its change. No matter the original repo updates its major, minor or patch version, we will update related version position.
 2. once we have our own changes.
 
 ## Keep it up-to-date with the upstream repo

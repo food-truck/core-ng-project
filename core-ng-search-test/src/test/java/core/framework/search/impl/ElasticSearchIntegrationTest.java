@@ -8,6 +8,7 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.json.JsonData;
 import core.framework.inject.Inject;
 import core.framework.json.JSON;
+import core.framework.search.AnalyzeTokens;
 import core.framework.search.BulkDeleteRequest;
 import core.framework.search.ClusterStateResponse;
 import core.framework.search.DeleteByQueryRequest;
@@ -212,6 +213,13 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     @Test
     void analyze() {
         List<String> tokens = documentType.analyze("standard", "word1 word2");
+        assertThat(tokens).contains("word1", "word2");
+    }
+
+    @Test
+    void detailedAnalyze(){
+        AnalyzeTokens analyzeTokens = documentType.detailedAnalyze("standard", "word1 word2");
+        List<String> tokens = analyzeTokens.tokens.stream().map(token -> token.term).collect(Collectors.toList());
         assertThat(tokens).contains("word1", "word2");
     }
 
