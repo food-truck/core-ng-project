@@ -220,19 +220,24 @@ class DatabaseImplTest {
 
     @Test
     void driverProperties() {
-        Properties properties = database.driverProperties("jdbc:mysql://localhost/demo", null, null);
+        Properties properties = database.driverProperties("jdbc:mysql://localhost/demo");
         assertThat(properties)
             .doesNotContainKeys("user", "password")
-            .containsEntry("useSSL", "false")
+            .containsEntry("sslMode", "DISABLED")
             .containsEntry("characterEncoding", "utf-8");
 
-        properties = database.driverProperties("jdbc:mysql://localhost/demo?useSSL=true&characterEncoding=latin1", "user", "password");
-        assertThat(properties).doesNotContainKeys("useSSL", "characterEncoding");
+        properties = database.driverProperties("jdbc:mysql://localhost/demo?sslMode=REQUIRED&characterEncoding=latin1");
+        assertThat(properties).doesNotContainKeys("sslMode", "characterEncoding");
 
-        properties = database.driverProperties("jdbc:mysql://localhost/demo?useSSL=true", null, null);
+        properties = database.driverProperties("jdbc:mysql://localhost/demo?sslMode=REQUIRED");
         assertThat(properties)
-            .doesNotContainKeys("useSSL")
+            .doesNotContainKeys("sslMode")
             .containsEntry("characterEncoding", "utf-8");
+
+        database.authProvider("gcloud");
+        properties = database.driverProperties("jdbc:mysql://localhost/demo");
+        assertThat(properties)
+            .containsEntry("sslMode", "PREFERRED");
     }
 
     @Test

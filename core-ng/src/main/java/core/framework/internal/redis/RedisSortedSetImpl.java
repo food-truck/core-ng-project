@@ -13,9 +13,10 @@ import java.io.UncheckedIOException;
 import java.util.Map;
 
 import static core.framework.internal.redis.Protocol.Command.ZADD;
+import static core.framework.internal.redis.Protocol.Command.ZPOPMIN;
 import static core.framework.internal.redis.Protocol.Command.ZRANGE;
-import static core.framework.internal.redis.Protocol.Command.ZRANGEBYSCORE;
 import static core.framework.internal.redis.Protocol.Command.ZREM;
+import static core.framework.internal.redis.Protocol.Keyword.BYSCORE;
 import static core.framework.internal.redis.Protocol.Keyword.LIMIT;
 import static core.framework.internal.redis.Protocol.Keyword.NX;
 import static core.framework.internal.redis.Protocol.Keyword.WITHSCORES;
@@ -118,31 +119,23 @@ public class RedisSortedSetImpl implements RedisSortedSet {
             redis.pool.returnItem(item);
             long elapsed = watch.elapsed();
             ActionLogContext.track("redis", elapsed, values == null ? 0 : values.size(), 0);
-            logger.debug("zrangeByScore, key={}, minScore={}, maxScore={}, returnedValues={}, elapsed={}", key, minScore, maxScore, values, elapsed);
+            logger.debug("zrangeByScore, key={}, minScore={}, maxScore={}, limit={}, returnedValues={}, elapsed={}", key, minScore, maxScore, limit, values, elapsed);
         }
     }
 
     private Object[] rangeByScore(RedisConnection connection, String key, long minScore, long maxScore, long limit) throws IOException {
-        connection.writeArray(8);
-        connection.writeBlobString(ZRANGEBYSCORE);
+        connection.writeArray(9);
+        connection.writeBlobString(ZRANGE);
         connection.writeBlobString(encode(key));
         connection.writeBlobString(encode(minScore));
         connection.writeBlobString(encode(maxScore));
+        connection.writeBlobString(BYSCORE);
         connection.writeBlobString(WITHSCORES);
         connection.writeBlobString(LIMIT);
         connection.writeBlobString(encode(0));
         connection.writeBlobString(encode(limit));
         connection.flush();
         return connection.readArray();
-    }
-
-    private Map<String, Long> valuesWithScores(Object[] response) throws IOException {
-        if (response.length % 2 != 0) throw new IOException("unexpected length of array, length=" + response.length);
-        Map<String, Long> values = Maps.newLinkedHashMapWithExpectedSize(response.length / 2);
-        for (int i = 0; i < response.length; i += 2) {
-            values.put(decode((byte[]) response[i]), (long) Double.parseDouble(decode((byte[]) response[i + 1])));
-        }
-        return values;
     }
 
     @Override
@@ -154,10 +147,11 @@ public class RedisSortedSetImpl implements RedisSortedSet {
 
         int fetchedEntries = 0;
         Map<String, Long> values = null;
+        int size = 0;
         PoolItem<RedisConnection> item = redis.pool.borrowItem();
         try {
             RedisConnection connection = item.resource;
-            Object[] response = rangeByScore(connection, key, minScore, maxScore, limit);
+            Object[] response = rangeByScore(connection, key, minScore, maxScore, -1);
             if (response.length % 2 != 0) throw new IOException("unexpected length of array, length=" + response.length);
             values = Maps.newLinkedHashMapWithExpectedSize(response.length / 2);
             fetchedEntries = response.length / 2;
@@ -167,6 +161,8 @@ public class RedisSortedSetImpl implements RedisSortedSet {
                 long removed = connection.readLong();
                 if (removed == 1L) {
                     values.put(decode(value), (long) Double.parseDouble(decode((byte[]) response[i + 1])));
+                    size++;
+                    if (limit > 0 && size >= limit) break;
                 }
             }
             return values;
@@ -176,10 +172,42 @@ public class RedisSortedSetImpl implements RedisSortedSet {
         } finally {
             redis.pool.returnItem(item);
             long elapsed = watch.elapsed();
-            int size = values == null ? 0 : values.size();
             ActionLogContext.track("redis", elapsed, fetchedEntries, size);
-            logger.debug("popByScore, key={}, start={}, stop={}, returnedValues={}, size={}, elapsed={}", key, minScore, maxScore, values, size, elapsed);
+            logger.debug("popByScore, key={}, minScore={}, maxScore={}, limit={}, returnedValues={}, size={}, elapsed={}", key, minScore, maxScore, limit, values, size, elapsed);
             redis.checkSlowOperation(elapsed);
         }
+    }
+
+    @Override
+    public Map<String, Long> popMin(String key, long limit) {
+        var watch = new StopWatch();
+        validate("key", key);
+        if (limit <= 0) throw new Error("limit must be greater than 0");
+        Map<String, Long> values = null;
+        PoolItem<RedisConnection> item = redis.pool.borrowItem();
+        try {
+            RedisConnection connection = item.resource;
+            connection.writeKeyArgumentCommand(ZPOPMIN, key, encode(limit));
+            Object[] response = connection.readArray();
+            values = valuesWithScores(response);
+            return values;
+        } catch (IOException e) {
+            item.broken = true;
+            throw new UncheckedIOException(e);
+        } finally {
+            redis.pool.returnItem(item);
+            long elapsed = watch.elapsed();
+            ActionLogContext.track("redis", elapsed, values == null ? 0 : values.size(), 0);
+            logger.debug("zpopmin, key={}, limit={}, returnedValues={}, elapsed={}", key, limit, values, elapsed);
+        }
+    }
+
+    private Map<String, Long> valuesWithScores(Object[] response) throws IOException {
+        if (response.length % 2 != 0) throw new IOException("unexpected length of array, length=" + response.length);
+        Map<String, Long> values = Maps.newLinkedHashMapWithExpectedSize(response.length / 2);
+        for (int i = 0; i < response.length; i += 2) {
+            values.put(decode((byte[]) response[i]), (long) Double.parseDouble(decode((byte[]) response[i + 1])));
+        }
+        return values;
     }
 }

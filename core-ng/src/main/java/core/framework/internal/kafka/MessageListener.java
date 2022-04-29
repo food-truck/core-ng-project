@@ -26,13 +26,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class MessageListener {
     private static final AtomicInteger CONSUMER_CLIENT_ID_SEQUENCE = new AtomicInteger(1);
     public final ConsumerMetrics consumerMetrics;
-    final Map<String, MessageProcess<?>> processes = new HashMap<>();
+    public final Set<String> topics = new HashSet<>();
+    public final Map<String, MessageProcess<?>> processes = new HashMap<>();
     final LogManager logManager;
 
     private final Logger logger = LoggerFactory.getLogger(MessageListener.class);
     private final KafkaURI uri;
     private final String name;
-    private final Set<String> topics = new HashSet<>();
 
     public int poolSize = Runtime.getRuntime().availableProcessors() * 4;
     public long longConsumerDelayThresholdInNano = Duration.ofSeconds(60).toNanos();
@@ -112,7 +112,7 @@ public class MessageListener {
             config.put(ConsumerConfig.CLIENT_ID_CONFIG, Network.LOCAL_HOST_NAME + "-" + CONSUMER_CLIENT_ID_SEQUENCE.getAndIncrement());      // will show in monitor metrics
             config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, Boolean.FALSE);
             config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");                      // refer to org.apache.kafka.clients.consumer.ConsumerConfig, must be in("latest", "earliest", "none")
-            config.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 1_800_000);                 // 30min as max process time for each poll
+            config.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 1_800_000);                  // 30min as max process time for each poll
             config.put(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, 500L);                       // longer backoff to reduce cpu usage when kafka is not available
             config.put(ConsumerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, 5_000L);                 // 5s
             config.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPollRecords);

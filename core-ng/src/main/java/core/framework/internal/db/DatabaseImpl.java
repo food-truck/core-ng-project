@@ -7,6 +7,8 @@ import core.framework.db.IsolationLevel;
 import core.framework.db.Repository;
 import core.framework.db.Transaction;
 import core.framework.db.UncheckedSQLException;
+import core.framework.internal.db.cloud.CloudAuthProvider;
+import core.framework.internal.db.cloud.GCloudAuthProvider;
 import core.framework.internal.log.ActionLog;
 import core.framework.internal.log.LogLevel;
 import core.framework.internal.log.LogManager;
@@ -37,6 +39,8 @@ import static core.framework.log.Markers.errorCode;
  * @author neo
  */
 public final class DatabaseImpl implements Database {
+    public static final String PROPERTY_KEY_AUTH_PROVIDER = "authProvider";
+
     static {
         // disable unnecessary mysql connection cleanup thread to reduce overhead
         System.setProperty(PropertyDefinitions.SYSP_disableAbandonedConnectionCleanup, "true");
@@ -46,6 +50,7 @@ public final class DatabaseImpl implements Database {
     public final DatabaseOperation operation;
     private final Logger logger = LoggerFactory.getLogger(DatabaseImpl.class);
     private final Map<Class<?>, RowMapper<?>> rowMappers = new HashMap<>(32);
+
     public String user;
     public String password;
     public int tooManyRowsReturnedThreshold = 1000;
@@ -56,6 +61,7 @@ public final class DatabaseImpl implements Database {
 
     private String url;
     private Properties driverProperties;
+    private CloudAuthProvider authProvider;
     private Duration timeout;
     private Driver driver;
 
@@ -87,8 +93,13 @@ public final class DatabaseImpl implements Database {
         if (url == null) throw new Error("url must not be null");
         Properties driverProperties = this.driverProperties;
         if (driverProperties == null) {
-            driverProperties = driverProperties(url, user, password);
+            driverProperties = driverProperties(url);
             this.driverProperties = driverProperties;
+        }
+        if (authProvider != null) {
+            // properties are thread safe, it's ok to set user/password with multiple threads
+            driverProperties.setProperty("user", authProvider.user());
+            driverProperties.setProperty("password", authProvider.accessToken());
         }
         Connection connection = null;
         try {
@@ -101,15 +112,17 @@ public final class DatabaseImpl implements Database {
         }
     }
 
-    Properties driverProperties(String url, String user, String password) {
+    Properties driverProperties(String url) {
         var properties = new Properties();
-        if (user != null) properties.setProperty("user", user);
-        if (password != null) properties.setProperty("password", password);
+        if (authProvider == null && user != null) properties.setProperty("user", user);
+        if (authProvider == null && password != null) properties.setProperty("password", password);
         if (url.startsWith("jdbc:mysql:")) {
-            String timeoutValue = String.valueOf(timeout.toMillis());
             // refer to https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-configuration-properties.html
-            properties.setProperty(PropertyKey.connectTimeout.getKeyName(), timeoutValue);
-            properties.setProperty(PropertyKey.socketTimeout.getKeyName(), timeoutValue);
+            properties.setProperty(PropertyKey.connectTimeout.getKeyName(), String.valueOf(timeout.toMillis()));
+            // add 10s for socket timeout which is read timeout, as all queries have queryTimeout, MySQL will send "KILL QUERY" command to MySQL server
+            // otherwise we will see socket timeout exception (com.mysql.cj.exceptions.StatementIsClosedException: No operations allowed after statement closed)
+            // refer to com.mysql.cj.CancelQueryTaskImpl
+            properties.setProperty(PropertyKey.socketTimeout.getKeyName(), String.valueOf(timeout.toMillis() + 10_000));
             // refer to https://dev.mysql.com/doc/c-api/8.0/en/mysql-affected-rows.html
             // refer to https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-connp-props-connection.html#cj-conn-prop_useAffectedRows
             // Don't set the CLIENT_FOUND_ROWS flag when connecting to the server (not JDBC-compliant, will break most applications that rely on "found" rows vs. "affected rows" for DML statements),
@@ -121,11 +134,20 @@ public final class DatabaseImpl implements Database {
             properties.setProperty(PropertyKey.rewriteBatchedStatements.getKeyName(), "true");
             properties.setProperty(PropertyKey.queryInterceptors.getKeyName(), MySQLQueryInterceptor.class.getName());
             properties.setProperty(PropertyKey.logger.getKeyName(), "Slf4JLogger");
+
             int index = url.indexOf('?');
             // mysql with ssl has overhead, usually we ensure security on arch level, e.g. gcloud sql proxy or firewall rule
-            if (index == -1 || url.indexOf("useSSL=", index + 1) == -1) properties.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+            // with gcloud iam / clear_text_password plugin, ssl is required
+            // refer to https://cloud.google.com/sql/docs/mysql/authentication
+            if (authProvider != null) {
+                properties.setProperty(PropertyKey.sslMode.getKeyName(), PropertyDefinitions.SslMode.PREFERRED.name());
+                properties.setProperty(PROPERTY_KEY_AUTH_PROVIDER, "gcloud");
+            } else if (index == -1 || url.indexOf("sslMode=", index + 1) == -1) {
+                properties.setProperty(PropertyKey.sslMode.getKeyName(), PropertyDefinitions.SslMode.DISABLED.name());
+            }
             // refer to https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-charsets.html
-            if (index == -1 || url.indexOf("characterEncoding=", index + 1) == -1) properties.setProperty(PropertyKey.characterEncoding.getKeyName(), "utf-8");
+            if (index == -1 || url.indexOf("characterEncoding=", index + 1) == -1)
+                properties.setProperty(PropertyKey.characterEncoding.getKeyName(), "utf-8");
         }
         return properties;
     }
@@ -139,6 +161,15 @@ public final class DatabaseImpl implements Database {
         this.timeout = timeout;
         operation.queryTimeoutInSeconds = (int) timeout.getSeconds();
         pool.checkoutTimeout(timeout);
+    }
+
+    public void authProvider(String provider) {
+        logger.info("use cloud auth provider, provider={}", provider);
+        if ("gcloud".equals(provider)) {
+            authProvider = GCloudAuthProvider.INSTANCE;
+        } else {
+            throw new Error("unsupported cloud auth provider, provider=" + provider);
+        }
     }
 
     public void url(String url) {
@@ -298,7 +329,7 @@ public final class DatabaseImpl implements Database {
         // check default max operations first then check if specified action level max operations
         if (operations > maxOperations && operations > actionLog.internalContext().maxDBOperations) {
             if (actionLog.remainingProcessTimeInNano() <= 0) {
-                // break if it took long and execute too many db queries
+                // break if it took too long and execute too many db queries
                 throw new Error("too many db operations, operations=" + operations);
             }
             if (actionLog.result == LogLevel.INFO) {    // only warn once, action hits here typically will call db more times ongoing

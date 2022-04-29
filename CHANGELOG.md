@@ -1,6 +1,73 @@
 ## Change log
 
-### 7.10.3-b0 (02/25/2022 - )
+### 7.10.6 (04/19/2022 - 04/28/2022)
+
+* db: tweak gcloud iam auth provider expiration time, make CancelQueryTaskImpl be aware of gcloud auth provider
+* db: tweak query timeout handling
+  > increase db socket timeout, to make MySQL cancel timer (CancelQueryTaskImpl) has more room to kill query
+* http: update undertow to 2.2.17
+  > UNDERTOW-2041 Error when X-forwarded-For header contains ipv6 address with leading zeroes
+  > UNDERTOW-2022 FixedLengthStreamSourceConduit must overwrite resumeReads
+* monitor: collect ES cpu usage
+  > added highCPUUsageThreshold in monitor es config
+* httpClient: verify hostname with trusting specific cert !!! behavior changed, check carefully
+  > previously, HTTPClient.builder().trust(CERT) will use empty hostname verifier
+  > now, only trustAll() will bypass hostname verifying, so right now if you trust specific cert, make sure you have CN/ALT_NAME matches the dns name (wildcard domain name also works)
+* httpClient: retry aware of maxProcessTime
+  > for short circuit, e.g. heavy load request causes remote service busy, and client timeout triggers more retry requests, to amplify the load
+* es: support refresh on bulk request
+  > to specify whether auto refresh after bulk request
+* es: added timeout in search/complete request
+* es: added DeleteByQuery
+* es: added perf trace for elasticSearch.refreshIndex
+* monitor: treat high disk usage as error
+  > disk full requires immediate attention to expand
+* action: use id as correlationId for root action
+  > to make kibana search easier, e.g. search by correlationId will list all actions
+  > log-processor action diagram also simplified
+
+### 7.10.5 (04/01/2022 - 04/14/2022)
+
+* search: truncate es request log
+  > bulk index request body can be huge, to reduce heap usage
+* db: support gcloud IAM auth
+  > gcloud mysql supported IAM service account auth, to use access token instead of user/password
+  > set db user to "iam/gcloud" to use gcloud iam auth
+* monitor: add retry on kube client
+  > to reduce failures when kube cluster upgrades by cloud
+* http: removed http().httpPort() and http().httpsPort(), replaced with http().listenHTTP(host) and http().listenHTTPS(host)
+  > replaced sys.http.port, sys.https.port with sys.http.listen and sys.https.listen
+  > host are in "host:port" format, e.g. 127.0.0.1:8080 or 8080 (equivalent to 0.0.0.0:8080)
+  > with cloud env, all envs have same dns/service name, so to simplify properties config, it's actually better to setup dns name to minic cloud in local
+  > e.g. set "customer-service" to 127.0.0.2 in local dns, and hardcode "https://customer-service" as customerServiceURL
+* log-collector: refer to above, use sys.http.listen and sys.https.listen env if needed
+* kafka: redesigned /_sys/ controller, now they are /_sys/kafka/topic/:topic/key/:key/publish and /_sys/kafka/topic/:topic/key/:key/handle
+  > publish is to publish message to kafka, visible to all consumers
+  > handle is to handle the message on the current pod, not visible to kafka, just call handler to process the message (manual recovery or replay message)
+
+### 7.10.4 (03/15/2022 - 03/31/2022)
+
+* maven: deleted old published version older than 7.9.0
+* redis: replaced ZRANGEBYSCORE with ZRANGE, requires redis 6.2 !!!
+* redis: for list.pop always use "LPOP count" to simplify, requires redis 6.2 !!!
+* redis: added RedisSortedSet.popMin
+* redis: improved RedisSortedSet.popByScore concurrency handling
+* kafka: collect producer kafka_request_size_max, collect kafka_max_message_size
+  > stats.kafka_request_size_max is from kafka producer metrics, which is compressed size (include key/value/header/protocol),
+  > broker size config "message.max.bytes" should be larger than this
+  > action.stats.kafka_max_message_size is uncompressed size of value bytes, (kafka().maxRequestSize() should be larger than this)
+* log-processor: added stat-kafka_max_message_size vis, added to kafka dashboard
+* log-processor: updated stat-kafka_request_size vis, added max request size
+* log: limit max size of actionLog.context() to 5000 for one key
+  > warn with "CONTEXT_TOO_LARGE" if too many context values
+* log: tweaked action log/trace truncation
+  > increased max request size to 2M
+  > check final action log json bytes before sending to log-kafka, if it's more than 2M, print log to console, and truncate context/trace
+  > with snappy compression, it's generally ok with broker message.max.bytes=1M
+  > in worst case, we can set log-kafka message.max.bytes=2M
+  > will review the current setup and potentially adjust in future
+
+### 7.10.3 (02/25/2022 - 03/14/2022)
 
 * db: fix: revert previous update UNEXPECTED_UPDATE_RESULT warning if updated row is 0
 * executor: log task class in trace to make it easier to find the corresponding code of executor task
@@ -8,6 +75,11 @@
   > it's not recommended putting dot in action log context key
 * log-processor: kibana json updated for kibana 8.1.0
   > TSVB metrics separate left axis bug fixed, so to revert GC diagrams back
+* search: update es to 8.1.0
+  > > BTW: ES cannot upgrade a node from version [7.14.0] directly to version [8.1.0], upgrade to version [7.17.0] first.
+* mongo: updated driver to 4.5.0
+  > removed mapReduce in favor of aggregate, it's deprecated by mongo 5.0  
+  > refer to https://docs.mongodb.com/manual/reference/command/mapReduce/#mapreduce
 
 ### 7.10.2 (02/11/2022 - 02/23/2022)
 

@@ -98,4 +98,16 @@ class MockRedisSortedSetTest {
             .containsOnlyKeys(List.of("1", "2", "3", "4"));
         assertThat(sortedSet.range("key", 9, 10)).isEmpty();
     }
+
+    @Test
+    void popMin() {
+        sortedSet.add("key", "1", 1);
+        sortedSet.add("key", "3", 3);
+        sortedSet.add("key", "2", 2);
+        sortedSet.add("key", "4", 4);
+
+        assertThat(sortedSet.popMin("key")).isEqualTo("1");
+        assertThat(sortedSet.popMin("key", 2)).containsExactly(entry("2", 2L), entry("3", 3L));
+        assertThat(sortedSet.popMin("key", 5)).containsExactly(entry("4", 4L));
+    }
 }

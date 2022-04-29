@@ -34,17 +34,21 @@ public class KafkaConfig extends Config {
     private MessageListener listener;
     private boolean handlerAdded;
     private int maxRequestSize = 1024 * 1024;   // default 1M, refer to org.apache.kafka.clients.producer.ProducerConfig.MAX_REQUEST_SIZE_CONFIG
+    private KafkaController controller;
 
     @Override
     protected void initialize(ModuleContext context, String name) {
         this.context = context;
         this.name = name;
+        controller = new KafkaController();
     }
 
     @Override
     protected void validate() {
         if (!handlerAdded)
-            throw new Error("kafka is configured, but no producer/consumer added, please remove unnecessary config, name=" + name);
+            throw new Error("kafka is configured, but no publisher/handler added, please remove unnecessary config, name=" + name);
+        if (listener != null && listener.topics.isEmpty())
+            throw new Error("kafka listener is configured, but no handler added, please remove unnecessary config, name=" + name);
     }
 
     public void uri(String uri) {
@@ -77,8 +81,8 @@ public class KafkaConfig extends Config {
             context.collector.metrics.add(producer.producerMetrics);
             context.startupHook.initialize.add(producer::initialize);
             context.shutdownHook.add(ShutdownHook.STAGE_4, producer::close);
-            var controller = new KafkaController(producer);
-            context.route(HTTPMethod.POST, managementPathPattern("/topic/:topic/message/:key"), (LambdaController) controller::publish, true);
+            controller.producer = producer;
+            context.route(HTTPMethod.POST, managementPathPattern("/topic/:topic/key/:key/publish"), (LambdaController) controller::publish, true);
             this.producer = producer;
         }
         return new MessagePublisherImpl<>(producer, topic, messageClass);
@@ -116,6 +120,8 @@ public class KafkaConfig extends Config {
             context.shutdownHook.add(ShutdownHook.STAGE_0, timeout -> listener.shutdown());
             context.shutdownHook.add(ShutdownHook.STAGE_1, listener::awaitTermination);
             context.collector.metrics.add(listener.consumerMetrics);
+            controller.listener = listener;
+            context.route(HTTPMethod.POST, managementPathPattern("/topic/:topic/key/:key/handle"), (LambdaController) controller::handle, true);
             this.listener = listener;   // make lambda not refer to this class/field
         }
         return listener;
@@ -132,9 +138,14 @@ public class KafkaConfig extends Config {
         listener().poolSize = poolSize;
     }
 
-    // to increase max message size, it must change on both producer and broker sides
-    // on broker size use "--override message.max.bytes=size"
-    // refer to https://kafka.apache.org/documentation/#message.max.bytes
+    // to increase max message size, both producer and broker sides have size limitation
+    // for broker
+    // use "--override message.max.bytes=size", refer to https://kafka.apache.org/documentation/#message.max.bytes
+    // for producer
+    // refer to org.apache.kafka.clients.producer.ProducerConfig.MAX_REQUEST_SIZE_CONFIG
+    // producer checks uncompressed request size, broker checks compressed request (actual request) size
+    // if message size exceeds producer limit, it throws error within current action
+    // if exceeds broker limit, broker rejects the message, error only shows on KafkaCallback (console output on kafka producer thread), no warning on broker side
     public void maxRequestSize(int size) {
         if (size <= 0) throw new Error("max request size must be greater than 0, value=" + size);
         if (producer != null) throw new Error("kafka().maxRequestSize() must be configured before adding publisher");
