@@ -100,8 +100,8 @@ final class Protocol {
 
         static final byte[] ZADD = Strings.bytes("ZADD");
         static final byte[] ZRANGE = Strings.bytes("ZRANGE");
-        static final byte[] ZRANGEBYSCORE = Strings.bytes("ZRANGEBYSCORE");
         static final byte[] ZREM = Strings.bytes("ZREM");
+        static final byte[] ZPOPMIN = Strings.bytes("ZPOPMIN");
     }
 
     static class Keyword {
@@ -111,5 +111,6 @@ final class Protocol {
         static final byte[] PX = Strings.bytes("PX");
         static final byte[] LIMIT = Strings.bytes("LIMIT");
         static final byte[] WITHSCORES = Strings.bytes("WITHSCORES");
+        static final byte[] BYSCORE = Strings.bytes("BYSCORE");
     }
 }

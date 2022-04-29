@@ -88,8 +88,8 @@ public class TestModule extends AbstractTestModule {
     }
 
     private void configureHTTP() {
-        http().httpPort(8080);
-        http().httpsPort(8443);
+        http().listenHTTP("8080");
+        http().listenHTTPS("0.0.0.0:8443");
         http().gzip();
         http().maxForwardedIPs(2);
         http().maxProcessTime(Duration.ofSeconds(30));
@@ -128,6 +128,7 @@ public class TestModule extends AbstractTestModule {
         schedule().timeZone(ZoneId.of("UTC"));
         Job job = new TestJob();
         schedule().fixedRate("fixed-rate-job", job, Duration.ofSeconds(10));
+        schedule().hourlyAt("hourly-job", job, 30, 0);
         schedule().dailyAt("daily-job", job, LocalTime.NOON);
         schedule().weeklyAt("weekly-job", job, DayOfWeek.MONDAY, LocalTime.NOON);
         schedule().monthlyAt("monthly-job", job, 1, LocalTime.NOON);

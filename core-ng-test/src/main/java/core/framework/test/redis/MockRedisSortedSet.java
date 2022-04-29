@@ -45,10 +45,10 @@ public class MockRedisSortedSet implements RedisSortedSet {
         int endIndex = stop < 0 ? (int) stop + size : (int) stop;
         if (endIndex >= size) endIndex = size - 1;
         return sortedSet.entrySet().stream()
-                .sorted(Entry.comparingByValue())
-                .skip(startIndex)
-                .limit(endIndex - startIndex + 1)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (key1, key2) -> key2, LinkedHashMap::new));
+            .sorted(Entry.comparingByValue())
+            .skip(startIndex)
+            .limit(endIndex - startIndex + 1)
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (key1, key2) -> key2, LinkedHashMap::new));
     }
 
     @Override
@@ -57,10 +57,10 @@ public class MockRedisSortedSet implements RedisSortedSet {
         if (value == null) return Map.of();
         var sortedSet = value.sortedSet();
         return sortedSet.entrySet().stream()
-                .filter(entry -> entry.getValue() >= minScore && entry.getValue() <= maxScore)
-                .sorted(Entry.comparingByValue())
-                .limit(limit == -1 ? Long.MAX_VALUE : limit)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (key1, key2) -> key2, LinkedHashMap::new));
+            .filter(entry -> entry.getValue() >= minScore && entry.getValue() <= maxScore)
+            .sorted(Entry.comparingByValue())
+            .limit(limit == -1 ? Long.MAX_VALUE : limit)
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (key1, key2) -> key2, LinkedHashMap::new));
     }
 
     @Override
@@ -69,10 +69,22 @@ public class MockRedisSortedSet implements RedisSortedSet {
         if (value == null) return Map.of();
         var sortedSet = value.sortedSet();
         return sortedSet.entrySet().stream()
-                .filter(entry -> entry.getValue() >= minScore && entry.getValue() <= maxScore)
-                .sorted(Entry.comparingByValue())
-                .limit(limit == -1 ? Long.MAX_VALUE : limit)
-                .peek(entry -> sortedSet.remove(entry.getKey()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (key1, key2) -> key2, LinkedHashMap::new));
+            .filter(entry -> entry.getValue() >= minScore && entry.getValue() <= maxScore)
+            .sorted(Entry.comparingByValue())
+            .limit(limit == -1 ? Long.MAX_VALUE : limit)
+            .peek(entry -> sortedSet.remove(entry.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (key1, key2) -> key2, LinkedHashMap::new));
+    }
+
+    @Override
+    public Map<String, Long> popMin(String key, long limit) {
+        var value = store.get(key);
+        if (value == null) return Map.of();
+        var sortedSet = value.sortedSet();
+        return sortedSet.entrySet().stream()
+            .sorted(Entry.comparingByValue())
+            .limit(limit)
+            .peek(entry -> sortedSet.remove(entry.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (key1, key2) -> key2, LinkedHashMap::new));
     }
 }

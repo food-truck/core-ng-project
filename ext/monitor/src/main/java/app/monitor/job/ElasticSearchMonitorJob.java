@@ -2,6 +2,7 @@ package app.monitor.job;
 
 import core.framework.internal.stat.Stats;
 import core.framework.kafka.MessagePublisher;
+import core.framework.log.Severity;
 import core.framework.log.message.StatMessage;
 import core.framework.scheduler.Job;
 import core.framework.scheduler.JobContext;
@@ -21,6 +22,7 @@ public class ElasticSearchMonitorJob implements Job {
     private final String app;
     private final String host;
     private final Map<String, GCStat> gcStats = Maps.newHashMapWithExpectedSize(2);
+    public double highCPUUsageThreshold;
     public double highHeapUsageThreshold;
     public double highDiskUsageThreshold;
 
@@ -49,6 +51,12 @@ public class ElasticSearchMonitorJob implements Job {
     Stats collect(ElasticSearchNodeStats.Node node) {
         var stats = new Stats();
 
+        collectDiskUsage(stats, node);  // disk usage is most important to check, if disk usage is high, requires to expand disk immediately
+
+        double cpuUsage = node.os.cpu.percent / 100d;
+        stats.put("es_cpu_usage", cpuUsage);
+        stats.checkHighUsage(cpuUsage, highCPUUsageThreshold, "cpu");
+
         double heapUsed = node.jvm.mem.heapUsedInBytes;
         stats.put("es_heap_used", heapUsed);
         double heapMax = node.jvm.mem.heapMaxInBytes;
@@ -65,13 +73,18 @@ public class ElasticSearchMonitorJob implements Job {
             stats.put("es_gc_" + gcStat.name + "_elapsed", (double) elapsed);
         }
 
+        stats.put("es_docs", node.indices.docs.count);
+        return stats;
+    }
+
+    private void collectDiskUsage(Stats stats, ElasticSearchNodeStats.Node node) {
         double diskUsed = node.fs.total.totalInBytes - node.fs.total.freeInBytes;
         stats.put("es_disk_used", diskUsed);
         double diskMax = node.fs.total.totalInBytes;
         stats.put("es_disk_max", diskMax);
-        stats.checkHighUsage(diskUsed / diskMax, highDiskUsageThreshold, "disk");
-
-        stats.put("es_docs", node.indices.docs.count);
-        return stats;
+        boolean highUsage = stats.checkHighUsage(diskUsed / diskMax, highDiskUsageThreshold, "disk");
+        if (highUsage) {
+            stats.severity = Severity.ERROR;
+        }
     }
 }

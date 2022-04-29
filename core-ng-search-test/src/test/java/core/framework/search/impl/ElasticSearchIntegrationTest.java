@@ -8,7 +8,9 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.json.JsonData;
 import core.framework.inject.Inject;
 import core.framework.json.JSON;
+import core.framework.search.BulkDeleteRequest;
 import core.framework.search.ClusterStateResponse;
+import core.framework.search.DeleteByQueryRequest;
 import core.framework.search.ElasticSearch;
 import core.framework.search.ElasticSearchType;
 import core.framework.search.ForEach;
@@ -178,12 +180,31 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void deleteByQuery() {
+        documentType.bulkIndex(range(0, 30).mapToObj(i -> document(String.valueOf(i), String.valueOf(i), i, 0, null, null))
+            .collect(toMap(document -> document.id, identity())));
+        elasticSearch.refreshIndex("document");
+
+        var request = new DeleteByQueryRequest();
+        request.query = new Query.Builder().range(range("int_field", 1, 15)).build();
+        request.refresh = Boolean.TRUE;
+        long deleted = documentType.deleteByQuery(request);
+
+        assertThat(deleted).isEqualTo(15);
+        assertThat(documentType.get("1")).isNotPresent();
+        assertThat(documentType.get("15")).isNotPresent();
+    }
+
+    @Test
     void bulkDelete() {
         documentType.index("1", document("1", "value1", 1, 0, null, null));
         documentType.index("2", document("2", "value2", 2, 0, null, null));
         elasticSearch.refreshIndex("document");
 
-        documentType.bulkDelete(List.of("1", "2"));
+        var request = new BulkDeleteRequest();
+        request.ids = List.of("1", "2");
+        request.refresh = Boolean.TRUE;
+        documentType.bulkDelete(request);
         assertThat(documentType.get("1")).isNotPresent();
         assertThat(documentType.get("2")).isNotPresent();
     }

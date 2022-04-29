@@ -58,7 +58,11 @@ public class DBConfig extends Config {
     }
 
     public void user(String user) {
-        database.user = user;
+        if ("iam/gcloud".equals(user)) {
+            database.authProvider("gcloud");
+        } else {
+            database.user = user;
+        }
     }
 
     public void password(String password) {
