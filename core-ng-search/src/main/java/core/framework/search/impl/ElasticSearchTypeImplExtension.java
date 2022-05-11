@@ -1,7 +1,14 @@
 package core.framework.search.impl;
 
-import core.framework.internal.json.JSONReader;
-import core.framework.internal.json.JSONWriter;
+import co.elastic.clients.elasticsearch._types.ErrorCause;
+import co.elastic.clients.elasticsearch._types.ShardFailure;
+import co.elastic.clients.elasticsearch.core.BulkResponse;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.indices.AnalyzeResponse;
+import co.elastic.clients.elasticsearch.indices.analyze.AnalyzeToken;
+import core.framework.internal.asm.CodeBuilder;
 import core.framework.internal.validate.Validator;
 import core.framework.log.ActionLogContext;
 import core.framework.search.AnalyzeRequest;
@@ -13,17 +20,6 @@ import core.framework.search.SearchException;
 import core.framework.search.SearchRequest;
 import core.framework.util.StopWatch;
 import core.framework.util.Strings;
-import org.apache.lucene.search.TotalHits;
-import org.elasticsearch.action.bulk.BulkRequest;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.indices.AnalyzeResponse;
-import org.elasticsearch.common.bytes.BytesReference;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.aggregations.Aggregation;
-import org.elasticsearch.search.aggregations.Aggregations;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,12 +27,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 import static core.framework.log.Markers.errorCode;
-import static org.elasticsearch.client.Requests.searchRequest;
 
 /**
  * @author miller
@@ -48,18 +42,17 @@ public final class ElasticSearchTypeImplExtension<T> {
     private final String index;
     private final long slowOperationThresholdInNanos;
     private final int maxResultWindow;
-    private final JSONReader<T> reader;
-    private final JSONWriter<T> writer;
     private final Validator<T> validator;
 
-    ElasticSearchTypeImplExtension(String index, long slowOperationThresholdInNanos, JSONReader<T> reader, JSONWriter<T> writer, Validator<T> validator, ElasticSearchImpl elasticSearch) {
+    private final Class<T> documentClass;
+
+    ElasticSearchTypeImplExtension(String index, long slowOperationThresholdInNanos, Validator<T> validator, ElasticSearchImpl elasticSearch, Class<T> documentClass) {
         this.elasticSearch = elasticSearch;
         this.maxResultWindow = elasticSearch.maxResultWindow;
         this.index = index;
         this.slowOperationThresholdInNanos = slowOperationThresholdInNanos;
-        this.reader = reader;
-        this.writer = writer;
         this.validator = validator;
+        this.documentClass = documentClass;
     }
 
     public ScoredSearchResponse<T> scoredSearch(SearchRequest request) {
@@ -69,18 +62,30 @@ public final class ElasticSearchTypeImplExtension<T> {
         String index = request.index == null ? this.index : request.index;
         int hits = 0;
         try {
-            var searchRequest = searchRequest(index);
-            if (request.type != null) searchRequest.searchType(request.type);
-            SearchSourceBuilder source = searchRequest.source().query(request.query);
-            request.aggregations.forEach(source::aggregation);
-            request.sorts.forEach(source::sort);
-            if (request.skip != null) source.from(request.skip);
-            if (request.limit != null) source.size(request.limit);
-            if (request.trackTotalHitsUpTo != null) source.trackTotalHitsUpTo(request.trackTotalHitsUpTo);
+            var searchRequest = co.elastic.clients.elasticsearch.core.SearchRequest.of(builder -> {
+                builder.index(index)
+                    .aggregations(request.aggregations)
+                    .sort(request.sorts)
+                    .query(request.query)
+                    .timeout(elasticSearch.timeout.toMillis() + "ms");
+                if (request.type != null) {
+                    builder.searchType(request.type);
+                }
+                if (request.skip != null) {
+                    builder.from(request.skip);
+                }
+                if (request.limit != null) {
+                    builder.size(request.limit);
+                }
+                if (request.trackTotalHitsUpTo != null) {
+                    builder.trackTotalHits(t -> t.count(request.trackTotalHitsUpTo));
+                }
+                return builder;
+            });
 
-            org.elasticsearch.action.search.SearchResponse response = search(searchRequest);
-            esTook = response.getTook().nanos();
-            hits = response.getHits().getHits().length;
+            var response = search(searchRequest);
+            esTook = response.took() * 1_000_000;
+            hits = response.hits().hits().size();
 
             return scoredSearchResponse(response);
         } catch (IOException e) {
@@ -97,10 +102,8 @@ public final class ElasticSearchTypeImplExtension<T> {
         var watch = new StopWatch();
         String index = request.index == null ? this.index : request.index;
         validator.validate(request.source, false);
-        byte[] document = writer.toJSON(request.source);
         try {
-            var indexRequest = new org.elasticsearch.action.index.IndexRequest(index).routing(request.routing).id(request.id).source(document, XContentType.JSON);
-            elasticSearch.client().index(indexRequest, RequestOptions.DEFAULT);
+            elasticSearch.client.index(builder -> builder.index(index).routing(request.routing).id(request.id).document(request.source));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
@@ -115,20 +118,19 @@ public final class ElasticSearchTypeImplExtension<T> {
         var watch = new StopWatch();
         if (request.requests == null || request.requests.isEmpty()) throw new Error("request.sources must not be empty");
         String index = request.index == null ? this.index : request.index;
-        var bulkRequest = new BulkRequest();
+        var operations = new ArrayList<BulkOperation>(request.requests.size());
         for (Map.Entry<String, BulkIndexWithRoutingRequest.Request<T>> entry : request.requests.entrySet()) {
             String id = entry.getKey();
             T source = entry.getValue().source;
             String routing = entry.getValue().routing;
             validator.validate(source, false);
-            var indexRequest = new org.elasticsearch.action.index.IndexRequest(index).id(id).routing(routing).source(writer.toJSON(source), XContentType.JSON);
-            bulkRequest.add(indexRequest);
+            operations.add(BulkOperation.of(builder -> builder.index(i -> i.index(index).id(id).routing(routing).document(source))));
         }
         long esTook = 0;
         try {
-            BulkResponse response = elasticSearch.client().bulk(bulkRequest, RequestOptions.DEFAULT);
-            esTook = response.getTook().nanos();
-            if (response.hasFailures()) throw new SearchException(response.buildFailureMessage());
+            BulkResponse response = elasticSearch.client.bulk(builder -> builder.operations(operations));
+            esTook = response.took() * 1_000_000;
+            validate(response);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
@@ -143,10 +145,10 @@ public final class ElasticSearchTypeImplExtension<T> {
         var watch = new StopWatch();
         String index = request.index == null ? this.index : request.index;
         try {
-            var analyzeRequest = org.elasticsearch.client.indices.AnalyzeRequest.withIndexAnalyzer(index, request.analyzer, request.text);
-            AnalyzeResponse response = elasticSearch.client().indices().analyze(analyzeRequest, RequestOptions.DEFAULT);
+            AnalyzeResponse response = elasticSearch.client.indices().analyze(builder ->
+                builder.index(index).analyzer(request.analyzer).text(request.text));
             var analyzeTokens = new AnalyzeTokens();
-            analyzeTokens.tokens = response.getTokens().stream().map(this::token).collect(Collectors.toList());
+            analyzeTokens.tokens = response.tokens().stream().map(this::token).collect(Collectors.toList());
             return analyzeTokens;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -158,27 +160,24 @@ public final class ElasticSearchTypeImplExtension<T> {
         }
     }
 
-    private ScoredSearchResponse<T> scoredSearchResponse(org.elasticsearch.action.search.SearchResponse response) throws IOException {
-        SearchHit[] hits = response.getHits().getHits();
-        List<ScoredSearchResponse.ScoredHit<T>> items = new ArrayList<>(hits.length);
-        for (SearchHit hit : hits) {
+    private ScoredSearchResponse<T> scoredSearchResponse(co.elastic.clients.elasticsearch.core.SearchResponse<T> response) throws IOException {
+        var hits = response.hits().hits();
+        var items = new ArrayList<ScoredSearchResponse.ScoredHit<T>>(hits.size());
+        for (Hit<T> hit : hits) {
             var scoredHit = new ScoredSearchResponse.ScoredHit<T>();
-            scoredHit.source = reader.fromJSON(BytesReference.toBytes(hit.getSourceRef()));
-            float score = hit.getScore();
-            scoredHit.score = Float.isNaN(score) ? null : score;
+            scoredHit.source = hit.source();
+            var score = hit.score();
+            scoredHit.score = score == null || Double.isNaN(score) ? null : score;
             items.add(scoredHit);
         }
-        Aggregations aggregationResponse = response.getAggregations();
-        Map<String, Aggregation> aggregations = aggregationResponse == null ? Map.of() : aggregationResponse.asMap();
-        TotalHits totalHits = response.getHits().getTotalHits();
-        long total = totalHits == null ? -1 : totalHits.value;
-        return new ScoredSearchResponse<>(items, total, aggregations);
+        long total = response.hits().total() == null ? 0 : response.hits().total().value();
+        return new ScoredSearchResponse<>(items, total, response.aggregations());
     }
 
-    private org.elasticsearch.action.search.SearchResponse search(org.elasticsearch.action.search.SearchRequest searchRequest) throws IOException {
+    private co.elastic.clients.elasticsearch.core.SearchResponse<T> search(co.elastic.clients.elasticsearch.core.SearchRequest searchRequest) throws IOException {
         logger.debug("search, request={}", searchRequest);
-        org.elasticsearch.action.search.SearchResponse response = elasticSearch.client().search(searchRequest, RequestOptions.DEFAULT);
-        if (response.getFailedShards() > 0) logger.warn("elasticsearch shards failed, response={}", response);
+        var response = elasticSearch.client.search(searchRequest, documentClass);
+        validate(response);
         return response;
     }
 
@@ -189,19 +188,48 @@ public final class ElasticSearchTypeImplExtension<T> {
             throw new Error(Strings.format("result window is too large, skip + limit must be less than or equal to max result window, skip={}, limit={}, maxResultWindow={}", request.skip, request.limit, maxResultWindow));
     }
 
+    private void validate(co.elastic.clients.elasticsearch.core.SearchResponse<T> response) {
+        if (response.shards().failed().intValue() > 0) {
+            for (ShardFailure failure : response.shards().failures()) {
+                ErrorCause reason = failure.reason();
+                logger.warn("shared failed, index={}, node={}, status={}, reason={}, trace={}",
+                    failure.index(), failure.node(), failure.status(),
+                    reason.reason(), reason.stackTrace());
+            }
+        }
+        if (response.timedOut()) {
+            logger.warn(errorCode("SLOW_ES"), "some of elasticsearch shards timed out");
+        }
+    }
+
+    private void validate(BulkResponse response) {
+        if (!response.errors()) return;
+
+        var builder = new CodeBuilder();
+        builder.append("bulk operation failed, errors=[\n");
+        for (BulkResponseItem item : response.items()) {
+            ErrorCause error = item.error();
+            if (error != null) {
+                builder.append("id={}, error={}, stackTrace={}\n", item.id(), error.reason(), error.stackTrace());
+            }
+        }
+        builder.append("]");
+        throw new SearchException(builder.build());
+    }
+
     private void checkSlowOperation(long elapsed) {
         if (elapsed > slowOperationThresholdInNanos) {
             logger.warn(errorCode("SLOW_ES"), "slow elasticsearch operation, elapsed={}", Duration.ofNanos(elapsed));
         }
     }
 
-    private AnalyzeTokens.Token token(AnalyzeResponse.AnalyzeToken analyzeToken) {
+    private AnalyzeTokens.Token token(AnalyzeToken analyzeToken) {
         var token = new AnalyzeTokens.Token();
-        token.term = analyzeToken.getTerm();
-        token.startOffset = analyzeToken.getStartOffset();
-        token.endOffset = analyzeToken.getEndOffset();
-        token.type = analyzeToken.getType();
-        token.position = analyzeToken.getPosition();
+        token.term = analyzeToken.token();
+        token.startOffset = analyzeToken.startOffset();
+        token.endOffset = analyzeToken.endOffset();
+        token.type = analyzeToken.type();
+        token.position = analyzeToken.position();
         return token;
     }
 }

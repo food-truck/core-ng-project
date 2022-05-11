@@ -10,9 +10,9 @@ public class AnalyzeTokens {
 
     public static class Token {
         public String term;
-        public int startOffset;
-        public int endOffset;
-        public int position;
+        public long startOffset;
+        public long endOffset;
+        public long position;
         public String type;
     }
 }

@@ -10,6 +10,7 @@ import core.framework.inject.Inject;
 import core.framework.json.JSON;
 import core.framework.search.AnalyzeTokens;
 import core.framework.search.BulkDeleteRequest;
+import core.framework.search.BulkIndexWithRoutingRequest;
 import core.framework.search.ClusterStateResponse;
 import core.framework.search.DeleteByQueryRequest;
 import core.framework.search.ElasticSearch;
@@ -82,6 +83,39 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void indexWithRouting() {
+        TestDocument document = document("2", "value2", 2, 0,
+            ZonedDateTime.now(),
+            LocalTime.of(12, 1, 2, 200000000));
+        documentType.indexWithRouting(document.id, document, "1");
+
+        Optional<TestDocument> returnedDocument = documentType.get(document.id);
+        assertThat(returnedDocument).get()
+            .usingRecursiveComparison()
+            .withComparatorForType(ChronoZonedDateTime.timeLineOrder(), ZonedDateTime.class)
+            .isEqualTo(document);
+    }
+
+    @Test
+    void bulkIndexWithRouting() {
+        TestDocument document = document("21", "value2", 2, 0,
+            ZonedDateTime.now(),
+            LocalTime.of(12, 1, 2, 200000000));
+        var requestMap = Maps.<String, BulkIndexWithRoutingRequest.Request<TestDocument>>newHashMap();
+        var request = new BulkIndexWithRoutingRequest.Request<TestDocument>();
+        request.routing = "1";
+        request.source = document;
+        requestMap.put(document.id, request);
+        documentType.bulkIndexWithRouting(requestMap);
+
+        Optional<TestDocument> returnedDocument = documentType.get(document.id);
+        assertThat(returnedDocument).get()
+            .usingRecursiveComparison()
+            .withComparatorForType(ChronoZonedDateTime.timeLineOrder(), ZonedDateTime.class)
+            .isEqualTo(document);
+    }
+
+    @Test
     void forEach() {
         documentType.bulkIndex(range(0, 30).mapToObj(i -> document(String.valueOf(i), String.valueOf(i), i, 0, null, null))
             .collect(toMap(document -> document.id, identity())));
@@ -142,6 +176,41 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
         assertThat(response.totalHits).isEqualTo(1);
         assertThat(response.hits).hasSize(1)
             .first().usingRecursiveComparison()
+            .withComparatorForType(ChronoZonedDateTime.timeLineOrder(), ZonedDateTime.class)
+            .isEqualTo(document);
+    }
+
+    @Test
+    void scoredSearch() {
+        TestDocument document = document("1", "1st Test's Product", 1, 0, null, LocalTime.NOON);
+        documentType.index(document.id, document);
+        elasticSearch.refreshIndex("document");
+
+        // test synonyms
+        var request = new SearchRequest();
+        request.type = SearchType.QueryThenFetch;
+        request.query = new Query.Builder().bool(b -> b.must(m -> m.match(match("string_field", "first")))
+            .filter(f -> f.term(term("enum_field", JSON.toEnumValue(TestDocument.TestEnum.VALUE1))))).build();
+
+        request.sorts.add(SortOptions.of(builder -> builder.script(s ->
+            s.script(script -> script.inline(i -> i.source("doc['int_field'].value * 3"))).type(ScriptSortType.Number))));
+
+        var response = documentType.scoredSearch(request);
+
+        assertThat(response.totalHits).isEqualTo(1);
+        assertThat(response.hits).hasSize(1)
+            .first().extracting("source").usingRecursiveComparison()
+            .withComparatorForType(ChronoZonedDateTime.timeLineOrder(), ZonedDateTime.class)
+            .isEqualTo(document);
+
+        // test stemmer
+        request = new SearchRequest();
+        request.query = new Query.Builder().match(match("string_field", "test")).build();
+        response = documentType.scoredSearch(request);
+
+        assertThat(response.totalHits).isEqualTo(1);
+        assertThat(response.hits).hasSize(1)
+            .first().extracting("source").usingRecursiveComparison()
             .withComparatorForType(ChronoZonedDateTime.timeLineOrder(), ZonedDateTime.class)
             .isEqualTo(document);
     }
@@ -217,7 +286,7 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     }
 
     @Test
-    void detailedAnalyze(){
+    void detailedAnalyze() {
         AnalyzeTokens analyzeTokens = documentType.detailedAnalyze("standard", "word1 word2");
         List<String> tokens = analyzeTokens.tokens.stream().map(token -> token.term).collect(Collectors.toList());
         assertThat(tokens).contains("word1", "word2");
