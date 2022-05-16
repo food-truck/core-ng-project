@@ -11,7 +11,9 @@ import org.slf4j.LoggerFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static core.framework.log.Markers.errorCode;
 
@@ -25,6 +27,7 @@ public final class ReadinessProbe {
     // hostURI is in host[:port] format
     public List<String> hostURIs = new ArrayList<>();
     public List<String> urls = new ArrayList<>();
+    public Map<String, String> defaultHeaders = new HashMap<>();
 
     public void check() throws Exception {
         logger.info("check readiness");
@@ -49,10 +52,14 @@ public final class ReadinessProbe {
             }
         }
         urls = null;    // release memory
+        this.defaultHeaders = null;
     }
 
     private void sendHTTPRequest(String url, HTTPClient client, StopWatch watch) throws InterruptedException {
         var request = new HTTPRequest(HTTPMethod.GET, url);
+        if (defaultHeaders != null && !defaultHeaders.isEmpty()) {
+            request.headers.putAll(defaultHeaders);
+        }
         while (true) {
             try {
                 HTTPResponse response = client.execute(request);
