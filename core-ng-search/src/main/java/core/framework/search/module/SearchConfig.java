@@ -19,6 +19,7 @@ public class SearchConfig extends Config {
     private ModuleContext context;
     private String name;
     private boolean typeAdded;
+    private boolean checkProbe = true;
 
     @Override
     protected void initialize(ModuleContext context, String name) {
@@ -42,7 +43,8 @@ public class SearchConfig extends Config {
     // comma separated hosts
     public void host(String host) {
         search.hosts = ElasticSearchHost.parse(host);
-        context.probe.urls.add(search.hosts[0].toURI() + "/_cluster/health?local=true");      // in kube env, it's ok to just check first pod of stateful set
+        if (checkProbe)
+            context.probe.urls.add(search.hosts[0].toURI() + "/_cluster/health?local=true");      // in kube env, it's ok to just check first pod of stateful set
     }
 
     public void auth(String apiKey) {
@@ -70,5 +72,12 @@ public class SearchConfig extends Config {
         context.beanFactory.bind(Types.generic(ElasticSearchType.class, documentClass), name, searchType);
         typeAdded = true;
         return searchType;
+    }
+
+    public void checkProbe(boolean checkProbe) {
+        if (search.hosts != null) {
+            throw new Error("search checkProbe must be configured before search host, name=" + name);
+        }
+        this.checkProbe = checkProbe;
     }
 }

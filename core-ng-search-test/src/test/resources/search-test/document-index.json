@@ -80,6 +80,9 @@
       },
       "enum_field": {
         "type": "keyword"
+      },
+      "nested": {
+        "type": "nested"
       }
     }
   }

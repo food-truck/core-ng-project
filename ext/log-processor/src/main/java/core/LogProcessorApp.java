@@ -91,6 +91,7 @@ public class LogProcessorApp extends App {
 
     private void configureSearch() {
         SearchConfig search = config(SearchConfig.class);
+        property("sys.elasticsearch.checkProbe").ifPresent(checkProbe -> search.checkProbe(Boolean.parseBoolean(checkProbe)));
         search.host(requiredProperty("sys.elasticsearch.host"));
         property("sys.elasticsearch.apiKey").ifPresent(search::auth);
         search.timeout(Duration.ofSeconds(20)); // use longer timeout/slowES threshold as log indexing can be slower with large batches

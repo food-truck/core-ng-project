@@ -11,7 +11,7 @@ import java.util.Optional;
 public interface ElasticSearchType<T> {
     SearchResponse<T> search(SearchRequest request);
 
-    ScoredSearchResponse<T> scoredSearch(SearchRequest request);
+    ExtendSearchResponse<T> extendSearch(ExtendSearchRequest request);
 
     List<String> complete(CompleteRequest request);
 

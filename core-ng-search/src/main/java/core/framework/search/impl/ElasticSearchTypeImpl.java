@@ -30,12 +30,13 @@ import core.framework.search.CompleteRequest;
 import core.framework.search.DeleteByQueryRequest;
 import core.framework.search.DeleteRequest;
 import core.framework.search.ElasticSearchType;
+import core.framework.search.ExtendSearchRequest;
+import core.framework.search.ExtendSearchResponse;
 import core.framework.search.ForEach;
 import core.framework.search.GetRequest;
 import core.framework.search.Index;
 import core.framework.search.IndexRequest;
 import core.framework.search.IndexWithRoutingRequest;
-import core.framework.search.ScoredSearchResponse;
 import core.framework.search.SearchException;
 import core.framework.search.SearchRequest;
 import core.framework.search.SearchResponse;
@@ -115,8 +116,8 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
     }
 
     @Override
-    public ScoredSearchResponse<T> scoredSearch(SearchRequest request) {
-        return extension.scoredSearch(request);
+    public ExtendSearchResponse<T> extendSearch(ExtendSearchRequest request) {
+        return extension.extendSearch(request);
     }
 
     @Override

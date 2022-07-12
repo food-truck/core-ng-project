@@ -1,11 +1,10 @@
 package core.framework.search.impl;
 
 import co.elastic.clients.elasticsearch._types.ErrorCause;
-import co.elastic.clients.elasticsearch._types.ShardFailure;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
+import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
-import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.indices.AnalyzeResponse;
 import co.elastic.clients.elasticsearch.indices.analyze.AnalyzeToken;
 import core.framework.internal.asm.CodeBuilder;
@@ -14,10 +13,10 @@ import core.framework.log.ActionLogContext;
 import core.framework.search.AnalyzeRequest;
 import core.framework.search.AnalyzeTokens;
 import core.framework.search.BulkIndexWithRoutingRequest;
+import core.framework.search.ExtendSearchRequest;
+import core.framework.search.ExtendSearchResponse;
 import core.framework.search.IndexWithRoutingRequest;
-import core.framework.search.ScoredSearchResponse;
 import core.framework.search.SearchException;
-import core.framework.search.SearchRequest;
 import core.framework.util.StopWatch;
 import core.framework.util.Strings;
 import org.slf4j.Logger;
@@ -27,6 +26,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -55,7 +55,7 @@ public final class ElasticSearchTypeImplExtension<T> {
         this.documentClass = documentClass;
     }
 
-    public ScoredSearchResponse<T> scoredSearch(SearchRequest request) {
+    public ExtendSearchResponse<T> extendSearch(ExtendSearchRequest request) {
         var watch = new StopWatch();
         validate(request);
         long esTook = 0;
@@ -63,31 +63,17 @@ public final class ElasticSearchTypeImplExtension<T> {
         int hits = 0;
         try {
             var searchRequest = co.elastic.clients.elasticsearch.core.SearchRequest.of(builder -> {
-                builder.index(index)
-                    .aggregations(request.aggregations)
-                    .sort(request.sorts)
-                    .query(request.query)
-                    .timeout(elasticSearch.timeout.toMillis() + "ms");
-                if (request.type != null) {
-                    builder.searchType(request.type);
-                }
-                if (request.skip != null) {
-                    builder.from(request.skip);
-                }
-                if (request.limit != null) {
-                    builder.size(request.limit);
-                }
-                if (request.trackTotalHitsUpTo != null) {
-                    builder.trackTotalHits(t -> t.count(request.trackTotalHitsUpTo));
-                }
+                builder.index(index).query(request.query).aggregations(request.aggregations).sort(request.sorts)
+                    .searchType(request.type).highlight(request.highlight).rescore(request.rescores)
+                    .from(request.skip).size(request.limit).timeout(elasticSearch.timeout.toMillis() + "ms");
+                if (request.trackTotalHitsUpTo != null) builder.trackTotalHits(t -> t.count(request.trackTotalHitsUpTo));
                 return builder;
             });
-
-            var response = search(searchRequest);
+            var response = elasticSearch.client.search(searchRequest, documentClass);
             esTook = response.took() * 1_000_000;
             hits = response.hits().hits().size();
 
-            return scoredSearchResponse(response);
+            return extendSearchResponse(response);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
@@ -160,46 +146,25 @@ public final class ElasticSearchTypeImplExtension<T> {
         }
     }
 
-    private ScoredSearchResponse<T> scoredSearchResponse(co.elastic.clients.elasticsearch.core.SearchResponse<T> response) throws IOException {
-        var hits = response.hits().hits();
-        var items = new ArrayList<ScoredSearchResponse.ScoredHit<T>>(hits.size());
-        for (Hit<T> hit : hits) {
-            var scoredHit = new ScoredSearchResponse.ScoredHit<T>();
-            scoredHit.source = hit.source();
-            var score = hit.score();
-            scoredHit.score = score == null || Double.isNaN(score) ? null : score;
-            items.add(scoredHit);
-        }
-        long total = response.hits().total() == null ? 0 : response.hits().total().value();
-        return new ScoredSearchResponse<>(items, total, response.aggregations());
+    private ExtendSearchResponse<T> extendSearchResponse(SearchResponse<T> response) throws IOException {
+        List<ExtendSearchResponse.ExtendHit<T>> items = response.hits().hits().stream().map(hit -> {
+            var extendHit = new ExtendSearchResponse.ExtendHit<T>();
+            extendHit.source = hit.source();
+            Double score = hit.score();
+            extendHit.score = score.isNaN() ? null : score;
+            extendHit.matchedQueries = hit.matchedQueries();
+            extendHit.innerHits = hit.innerHits();
+            extendHit.highlightFields = hit.highlight();
+            return extendHit;
+        }).collect(Collectors.toList());
+        return new ExtendSearchResponse<>(items, response.hits().total() == null ? 0 : response.hits().total().value(), response.aggregations());
     }
 
-    private co.elastic.clients.elasticsearch.core.SearchResponse<T> search(co.elastic.clients.elasticsearch.core.SearchRequest searchRequest) throws IOException {
-        logger.debug("search, request={}", searchRequest);
-        var response = elasticSearch.client.search(searchRequest, documentClass);
-        validate(response);
-        return response;
-    }
-
-    private void validate(SearchRequest request) {
+    private void validate(ExtendSearchRequest request) {
         int skip = request.skip == null ? 0 : request.skip;
         int limit = request.limit == null ? 0 : request.limit;
         if (skip + limit > maxResultWindow)
             throw new Error(Strings.format("result window is too large, skip + limit must be less than or equal to max result window, skip={}, limit={}, maxResultWindow={}", request.skip, request.limit, maxResultWindow));
-    }
-
-    private void validate(co.elastic.clients.elasticsearch.core.SearchResponse<T> response) {
-        if (response.shards().failed().intValue() > 0) {
-            for (ShardFailure failure : response.shards().failures()) {
-                ErrorCause reason = failure.reason();
-                logger.warn("shared failed, index={}, node={}, status={}, reason={}, trace={}",
-                    failure.index(), failure.node(), failure.status(),
-                    reason.reason(), reason.stackTrace());
-            }
-        }
-        if (response.timedOut()) {
-            logger.warn(errorCode("SLOW_ES"), "some of elasticsearch shards timed out");
-        }
     }
 
     private void validate(BulkResponse response) {

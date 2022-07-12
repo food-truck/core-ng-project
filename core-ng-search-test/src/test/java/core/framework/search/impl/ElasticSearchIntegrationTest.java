@@ -181,41 +181,6 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     }
 
     @Test
-    void scoredSearch() {
-        TestDocument document = document("1", "1st Test's Product", 1, 0, null, LocalTime.NOON);
-        documentType.index(document.id, document);
-        elasticSearch.refreshIndex("document");
-
-        // test synonyms
-        var request = new SearchRequest();
-        request.type = SearchType.QueryThenFetch;
-        request.query = new Query.Builder().bool(b -> b.must(m -> m.match(match("string_field", "first")))
-            .filter(f -> f.term(term("enum_field", JSON.toEnumValue(TestDocument.TestEnum.VALUE1))))).build();
-
-        request.sorts.add(SortOptions.of(builder -> builder.script(s ->
-            s.script(script -> script.inline(i -> i.source("doc['int_field'].value * 3"))).type(ScriptSortType.Number))));
-
-        var response = documentType.scoredSearch(request);
-
-        assertThat(response.totalHits).isEqualTo(1);
-        assertThat(response.hits).hasSize(1)
-            .first().extracting("source").usingRecursiveComparison()
-            .withComparatorForType(ChronoZonedDateTime.timeLineOrder(), ZonedDateTime.class)
-            .isEqualTo(document);
-
-        // test stemmer
-        request = new SearchRequest();
-        request.query = new Query.Builder().match(match("string_field", "test")).build();
-        response = documentType.scoredSearch(request);
-
-        assertThat(response.totalHits).isEqualTo(1);
-        assertThat(response.hits).hasSize(1)
-            .first().extracting("source").usingRecursiveComparison()
-            .withComparatorForType(ChronoZonedDateTime.timeLineOrder(), ZonedDateTime.class)
-            .isEqualTo(document);
-    }
-
-    @Test
     void searchDateRange() {
         ZonedDateTime from = ZonedDateTime.now();
         ZonedDateTime to = from.plusDays(5);

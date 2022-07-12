@@ -1,8 +1,14 @@
 ## Change Log In Wonder
 
+### 1.3.0 ()
+* corresponds to upstream version **7.10.6**
+* search: support extendSearch() for extra search cases in Wonder
+* search: support checkProbe in SearchConfig. Once set `checkProbe = false`, it will skip es probe check when app starts
+* log-processor: add `sys.elasticsearch.checkProbe` property to enable SearchConfig.checkProbe()
+
 ### 1.2.3 (12/13/2021)
 
-# corresponds to upstream version **7.9.3**.
+## corresponds to upstream version **7.9.3**.
 * monitor: improve kube pod monitor error message for "Unschedulable" condition
 * action: fixed webserviceClient/messagePublisher/executor only pass trace header when trace = cascade
 * action: redesigned maxProcessTime behavior, use http client timeout and shutdown time out as benchmark

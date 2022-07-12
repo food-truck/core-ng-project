@@ -27,4 +27,11 @@ class SearchConfigTest {
         assertThatThrownBy(() -> config.validate())
                 .hasMessageContaining("search is configured but no type added");
     }
+
+    @Test
+    void checkProbe(){
+        config.host("localhost");
+        assertThatThrownBy(() -> config.checkProbe(true))
+            .hasMessageContaining("search checkProbe must be configured before search host");
+    }
 }
