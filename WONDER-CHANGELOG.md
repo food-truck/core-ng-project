@@ -5,6 +5,7 @@
 * search: support extendSearch() for extra search cases in Wonder
 * search: support checkProbe in SearchConfig. Once set `checkProbe = false`, it will skip es probe check when app starts
 * log-processor: add `sys.elasticsearch.checkProbe` property to enable SearchConfig.checkProbe()
+* bean validator: remove calling of BeanClassNameValidator, since we can’t coordinate all teams prevent them to use the same class name
 
 ### 1.2.3 (12/13/2021)
 

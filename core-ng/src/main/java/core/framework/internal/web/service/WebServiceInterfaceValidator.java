@@ -51,7 +51,7 @@ public class WebServiceInterfaceValidator {
         if (!serviceInterface.isInterface())
             throw new Error("service interface must be interface, serviceInterface=" + serviceInterface.getCanonicalName());
 
-        validator.beanClassNameValidator.validate(serviceInterface);
+//        validator.beanClassNameValidator.validate(serviceInterface);
 
         Map<String, Method> methodNames = Maps.newHashMap();
         for (Method method : serviceInterface.getDeclaredMethods()) {

@@ -16,7 +16,7 @@ public final class BeanClassValidator { // bean is used by both web service requ
         boolean added = validatedBeanClasses.add(beanClass);
         if (!added) return;
 
-        var validator = new JSONClassValidator(beanClass) {
+        var validator = new JSONClassValidator(beanClass)/* {
             @Override
             public void visitClass(Class<?> objectClass, String path) {
                 super.visitClass(objectClass, path);
@@ -28,7 +28,7 @@ public final class BeanClassValidator { // bean is used by both web service requ
                 super.visitEnum(enumClass);
                 beanClassNameValidator.validate(enumClass);
             }
-        };
+        }*/;
         validator.validate();
     }
 }

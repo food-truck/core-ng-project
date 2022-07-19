@@ -25,7 +25,8 @@ import static core.framework.util.Strings.format;
 final class QueryParamClassValidator implements ClassVisitor {
     private final ClassValidator validator;
     private final Set<String> visitedParams = Sets.newHashSet();
-    private final BeanClassNameValidator beanClassNameValidator;
+    //just change private to public here, since we don't want to make many changes from upstream
+    public final BeanClassNameValidator beanClassNameValidator;
 
     QueryParamClassValidator(Class<?> beanClass, BeanClassNameValidator beanClassNameValidator) {
         this.beanClassNameValidator = beanClassNameValidator;
@@ -42,7 +43,7 @@ final class QueryParamClassValidator implements ClassVisitor {
 
     @Override
     public void visitClass(Class<?> objectClass, String path) {
-        beanClassNameValidator.validate(objectClass);
+//        beanClassNameValidator.validate(objectClass);
     }
 
     @Override
@@ -64,7 +65,7 @@ final class QueryParamClassValidator implements ClassVisitor {
 
     @Override
     public void visitEnum(Class<?> enumClass) {
-        beanClassNameValidator.validate(enumClass);
+//        beanClassNameValidator.validate(enumClass);
         JSONClassValidator.validateEnum(enumClass);
     }
 }
