@@ -6,4 +6,5 @@ package core.log.service;
 public class IndexOption {
     public int numberOfShards;
     public String refreshInterval;
+    public String lifecycleName;
 }

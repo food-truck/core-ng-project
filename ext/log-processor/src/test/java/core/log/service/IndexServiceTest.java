@@ -44,4 +44,13 @@ class IndexServiceTest {
             .contains("\"number_of_shards\": \"3\"")
             .contains("\"refresh_interval\": \"3s\"");
     }
+
+    @Test
+    void indexLifecycle() {
+        indexService.option.lifecycleName = "application-logs";
+        assertThat(indexService.template("index/action-index-template.json"))
+            .contains("\"number_of_shards\": \"3\"")
+            .contains("\"refresh_interval\": \"3s\"")
+            .contains("\"index.lifecycle.name\":\"application-logs\"");
+    }
 }

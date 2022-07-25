@@ -2,10 +2,13 @@
 
 ### 1.3.0 ()
 * corresponds to upstream version **7.10.6**
+* bean validator: remove calling of BeanClassNameValidator, since we can’t coordinate all teams prevent them to use the same class name
 * search: support extendSearch() for extra search cases in Wonder
 * search: support checkProbe in SearchConfig. Once set `checkProbe = false`, it will skip es probe check when app starts
 * log-processor: add `sys.elasticsearch.checkProbe` property to enable SearchConfig.checkProbe()
-* bean validator: remove calling of BeanClassNameValidator, since we can’t coordinate all teams prevent them to use the same class name
+* log-processor: add a new log appender `ConsoleAppenderExtenssion` to index trace log into elasticsearch
+* log-processor: expand action index name as `action-{app}-{date}` once the field `app` is not blank in action document
+* log-processor: support `app.index.lifecycle.name` for linking lifecycle policy to index template 
 
 ### 1.2.3 (12/13/2021)
 

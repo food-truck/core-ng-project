@@ -6,6 +6,7 @@ import core.framework.search.BulkIndexRequest;
 import core.framework.search.ElasticSearchType;
 import core.framework.search.IndexRequest;
 import core.framework.util.Maps;
+import core.framework.util.Strings;
 import core.log.domain.ActionDocument;
 import core.log.domain.TraceDocument;
 
@@ -62,7 +63,7 @@ public class ActionService {
 
     private void indexAction(String id, ActionDocument action, LocalDate now) {
         IndexRequest<ActionDocument> request = new IndexRequest<>();
-        request.index = indexService.indexName("action", now);
+        request.index = indexService.indexName(actionIndexName(action), now);
         request.id = id;
         request.source = action;
         actionType.index(request);
@@ -119,5 +120,12 @@ public class ActionService {
         document.errorCode = message.errorCode;
         document.content = message.traceLog;
         return document;
+    }
+
+    String actionIndexName(ActionDocument action) {
+        if (Strings.isBlank(action.app)) {
+            return "action";
+        }
+        return "action-" + action.app;
     }
 }

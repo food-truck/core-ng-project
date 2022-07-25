@@ -20,6 +20,7 @@ import core.log.kafka.EventMessageHandler;
 import core.log.kafka.StatMessageHandler;
 import core.log.service.ActionLogForwarder;
 import core.log.service.ActionService;
+import core.log.service.ConsoleAppenderExtension;
 import core.log.service.EventForwarder;
 import core.log.service.EventService;
 import core.log.service.IndexOption;
@@ -50,6 +51,7 @@ public class LogProcessorApp extends App {
         bind(StatService.class);
         bind(EventService.class);
 
+        configureLogAppender();
         onStartup(indexService::createIndexTemplates);
 
         configureKibanaService();
@@ -71,10 +73,21 @@ public class LogProcessorApp extends App {
         });
     }
 
+    private void configureLogAppender() {
+        property("sys.log.appender").ifPresent(appender -> {
+            if ("console".equals(appender)) {
+                log().appendToConsole();
+            } else if ("consoleExtension".equals(appender)) {
+                log().appender(bind(ConsoleAppenderExtension.class));
+            }
+        });
+    }
+
     private void configureIndexOption() {
         var option = new IndexOption();
         option.numberOfShards = Integer.parseInt(property("app.index.shards").orElse("1"));     // with small cluster one shard has the best performance, for larger cluster use kube env to customize
         option.refreshInterval = property("app.index.refresh.interval").orElse("10s");          // use longer refresh to tune load on log es
+        option.lifecycleName = property("app.index.lifecycle.name").orElse(null);
         bind(option);
     }
 

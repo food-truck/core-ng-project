@@ -3,6 +3,7 @@ package core.log.service;
 import core.framework.inject.Inject;
 import core.framework.search.ElasticSearch;
 import core.framework.util.ClasspathResources;
+import core.framework.util.Strings;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -41,7 +42,15 @@ public class IndexService {
 
     String template(String path) {
         String template = ClasspathResources.text(path);
+        if (Strings.isBlank(option.lifecycleName)) {
+            return template.replace("${NUMBER_OF_SHARDS}", String.valueOf(option.numberOfShards))
+                .replace("${REFRESH_INTERVAL}", option.refreshInterval);
+        }
         return template.replace("${NUMBER_OF_SHARDS}", String.valueOf(option.numberOfShards))
-            .replace("${REFRESH_INTERVAL}", option.refreshInterval);
+            .replace("${REFRESH_INTERVAL}", appendLifecycleNameAfterInterval());
+    }
+
+    String appendLifecycleNameAfterInterval() {
+        return Strings.format("{}\",\"index.lifecycle.name\":\"{}", option.refreshInterval, option.lifecycleName);
     }
 }
