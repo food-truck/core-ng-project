@@ -21,15 +21,15 @@ class SearchConfigTest {
     @Test
     void validate() {
         assertThatThrownBy(() -> config.validate())
-                .hasMessageContaining("search host must be configured");
+            .hasMessageContaining("search host must be configured");
 
         config.host("localhost");
         assertThatThrownBy(() -> config.validate())
-                .hasMessageContaining("search is configured but no type added");
+            .hasMessageContaining("search is configured but no type added");
     }
 
     @Test
-    void checkProbe(){
+    void checkProbe() {
         config.host("localhost");
         assertThatThrownBy(() -> config.checkProbe(true))
             .hasMessageContaining("search checkProbe must be configured before search host");

@@ -108,6 +108,7 @@ public class ActionService {
         document.context = message.context;
         document.stats = message.stats;
         document.performanceStats = message.performanceStats;
+        document.info = message.info;
         return document;
     }
 

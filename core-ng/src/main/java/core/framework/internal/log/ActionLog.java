@@ -146,6 +146,22 @@ public final class ActionLog {
         add(event("[context] {}={}", key, values.length == 1 ? values[0] : values));
     }
 
+    public void info(String key, Object... values) {
+        List<String> infoValues = context.computeIfAbsent(key, k -> new ArrayList<>(Math.max(2, values.length)));
+        for (Object value : values) {
+            String infoValue = String.valueOf(value);
+            // currently, we just reuse the context values constrains on info values
+            if (infoValue.length() > MAX_CONTEXT_VALUE_LENGTH) {
+                process(new LogEvent(LOGGER, Markers.errorCode("CONTEXT_INFO_TOO_LARGE"), WARN, "info value is too long, key={}, value={}", new Object[]{key, infoValue}, new Error("info value is too long")));
+            } else if (infoValues.size() >= MAX_CONTEXT_VALUES_SIZE) {
+                if (!"CONTEXT_INFO_TOO_LARGE".equals(errorCode))
+                    process(new LogEvent(LOGGER, Markers.errorCode("CONTEXT_INFO_TOO_LARGE"), WARN, "too many info values, key={}, size={}", new Object[]{key, infoValues.size()}, new Error("too many info values")));
+            } else {
+                infoValues.add(infoValue);
+            }
+        }
+    }
+
     public void stat(String key, double value) {
         stats.compute(key, (k, oldValue) -> (oldValue == null) ? value : oldValue + value);
         var format = new DecimalFormat();

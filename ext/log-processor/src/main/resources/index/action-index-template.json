@@ -57,6 +57,15 @@
               "type": "integer"
             }
           }
+        },
+        {
+          "info": {
+            "path_match": "info.*",
+            "mapping": {
+              "type": "text",
+              "index": "false"
+            }
+          }
         }
       ],
       "properties": {

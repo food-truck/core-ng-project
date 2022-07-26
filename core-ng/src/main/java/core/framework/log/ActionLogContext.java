@@ -57,6 +57,13 @@ public final class ActionLogContext {
         return actionLog.track(operation, elapsed, readEntries, writeEntries);
     }
 
+    public static void info(String key, Object... values) {
+        ActionLog actionLog = LogManager.CURRENT_ACTION_LOG.get();
+        if (actionLog != null) {
+            actionLog.info(key, values);
+        }
+    }
+
     public static void triggerTrace(boolean cascade) {
         ActionLog actionLog = LogManager.CURRENT_ACTION_LOG.get();
         if (actionLog != null) {
