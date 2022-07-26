@@ -1,6 +1,7 @@
 package core.log.service;
 
 import core.framework.inject.Inject;
+import core.framework.log.Markers;
 import core.framework.log.message.ActionLogMessage;
 import core.framework.search.BulkIndexRequest;
 import core.framework.search.ElasticSearchType;
@@ -9,6 +10,8 @@ import core.framework.util.Maps;
 import core.framework.util.Strings;
 import core.log.domain.ActionDocument;
 import core.log.domain.TraceDocument;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -18,6 +21,8 @@ import java.util.Map;
  * @author neo
  */
 public class ActionService {
+    private final Logger logger = LoggerFactory.getLogger(ActionService.class);
+
     @Inject
     IndexService indexService;
     @Inject
@@ -39,15 +44,15 @@ public class ActionService {
                 index(message, now);
             }
         } else {
-            Map<String, ActionDocument> actions = Maps.newHashMapWithExpectedSize(messages.size());
+            Map<String, Map<String, ActionDocument>> actionGroups = Maps.newHashMap();
             Map<String, TraceDocument> traces = Maps.newHashMap();
             for (ActionLogMessage message : messages) {
-                actions.put(message.id, action(message));
+                actionGroups.computeIfAbsent(message.app, k -> Maps.newHashMap()).put(message.id, action(message));
                 if (message.traceLog != null) {
                     traces.put(message.id, trace(message));
                 }
             }
-            indexActions(actions, now);
+            actionGroups.forEach((group, actions) -> indexActions(group, actions, now));
             if (!traces.isEmpty()) {
                 indexTraces(traces, now);
             }
@@ -63,7 +68,7 @@ public class ActionService {
 
     private void indexAction(String id, ActionDocument action, LocalDate now) {
         IndexRequest<ActionDocument> request = new IndexRequest<>();
-        request.index = indexService.indexName(actionIndexName(action), now);
+        request.index = indexService.indexName(actionIndexName(action.app), now);
         request.id = id;
         request.source = action;
         actionType.index(request);
@@ -77,11 +82,15 @@ public class ActionService {
         traceType.index(request);
     }
 
-    private void indexActions(Map<String, ActionDocument> actions, LocalDate now) {
-        BulkIndexRequest<ActionDocument> request = new BulkIndexRequest<>();
-        request.index = indexService.indexName("action", now);
-        request.sources = actions;
-        actionType.bulkIndex(request);
+    private void indexActions(String group, Map<String, ActionDocument> actions, LocalDate now) {
+        try {
+            BulkIndexRequest<ActionDocument> request = new BulkIndexRequest<>();
+            request.index = indexService.indexName(actionIndexName(group), now);
+            request.sources = actions;
+            actionType.bulkIndex(request);
+        } catch (Exception e) {
+            logger.error(Markers.errorCode("BULK_INDEX_FAILED"), Strings.format("bulk index for {} failed", group), e);
+        }
     }
 
     private void indexTraces(Map<String, TraceDocument> traces, LocalDate now) {
@@ -122,10 +131,10 @@ public class ActionService {
         return document;
     }
 
-    String actionIndexName(ActionDocument action) {
-        if (Strings.isBlank(action.app)) {
+    String actionIndexName(String group) {
+        if (Strings.isBlank(group)) {
             return "action";
         }
-        return "action-" + action.app;
+        return "action-" + group;
     }
 }

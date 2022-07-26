@@ -104,9 +104,40 @@ class ActionServiceTest extends IntegrationTest {
         assertThat(action.result).isEqualTo("TRACE");
     }
 
+    @Test
+    void testActionGroup() {
+        ActionLogMessage message = message("1", "OK");
+        message.app = "test-service";
+        LocalDate now = LocalDate.of(2022, Month.JULY, 26);
+        actionService.index(List.of(message), now);
+        ActionDocument action = actionDocument(message.app, now, message.id);
+        assertThat(action.app).isEqualTo(message.app);
+
+        List<ActionLogMessage> messages = Lists.newArrayList();
+        for (int i = 0; i < 6; i++) {
+            message = message("bulk-" + i, "OK");
+            message.app = "test-service-" + i;
+            messages.add(message);
+        }
+        actionService.index(messages, now);
+        ActionLogMessage message0 = messages.get(0);
+        ActionDocument action0 = actionDocument(message0.app, now, message0.id);
+        assertThat(action0.app).isEqualTo(message0.app);
+        ActionLogMessage message2 = messages.get(2);
+        ActionDocument action2 = actionDocument(message2.app, now, message2.id);
+        assertThat(action2.app).isEqualTo(message2.app);
+    }
+
     private ActionDocument actionDocument(LocalDate now, String id) {
         var request = new GetRequest();
         request.index = indexService.indexName("action", now);
+        request.id = id;
+        return actionType.get(request).orElseThrow(() -> new Error("not found"));
+    }
+
+    private ActionDocument actionDocument(String group, LocalDate now, String id) {
+        var request = new GetRequest();
+        request.index = indexService.indexName(actionService.actionIndexName(group), now);
         request.id = id;
         return actionType.get(request).orElseThrow(() -> new Error("not found"));
     }
