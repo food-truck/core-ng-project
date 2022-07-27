@@ -30,6 +30,7 @@ public final class ActionLog {
     public final String id;
     public final Instant date;
     public final Map<String, List<String>> context;
+    public final Map<String, List<String>> info;
     public final Map<String, Double> stats;
     final Map<String, PerformanceStat> performanceStats;
     private final List<LogEvent> events;
@@ -61,6 +62,7 @@ public final class ActionLog {
         }
         events = new ArrayList<>(32);   // according to benchmark, ArrayList is as fast as LinkedList with max 3000 items, and has smaller memory footprint
         context = new HashMap<>();  // default capacity is 16, no need to keep insertion order, kibana will sort all keys on display
+        info = new HashMap<>();
         stats = new HashMap<>();
         performanceStats = new HashMap<>();
 
@@ -147,7 +149,7 @@ public final class ActionLog {
     }
 
     public void info(String key, Object... values) {
-        List<String> infoValues = context.computeIfAbsent(key, k -> new ArrayList<>(Math.max(2, values.length)));
+        List<String> infoValues = info.computeIfAbsent(key, k -> new ArrayList<>(Math.max(2, values.length)));
         for (Object value : values) {
             String infoValue = String.valueOf(value);
             // currently, we just reuse the context values constrains on info values
@@ -160,6 +162,7 @@ public final class ActionLog {
                 infoValues.add(infoValue);
             }
         }
+        add(event("[info] {}={}", key, values.length == 1 ? values[0] : values));
     }
 
     public void stat(String key, double value) {
