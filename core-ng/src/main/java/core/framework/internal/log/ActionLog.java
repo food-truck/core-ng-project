@@ -30,6 +30,7 @@ public final class ActionLog {
     public final String id;
     public final Instant date;
     public final Map<String, List<String>> context;
+    public final Map<String, List<String>> info;
     public final Map<String, Double> stats;
     final Map<String, PerformanceStat> performanceStats;
     private final List<LogEvent> events;
@@ -61,6 +62,7 @@ public final class ActionLog {
         }
         events = new ArrayList<>(32);   // according to benchmark, ArrayList is as fast as LinkedList with max 3000 items, and has smaller memory footprint
         context = new HashMap<>();  // default capacity is 16, no need to keep insertion order, kibana will sort all keys on display
+        info = new HashMap<>();
         stats = new HashMap<>();
         performanceStats = new HashMap<>();
 
@@ -144,6 +146,23 @@ public final class ActionLog {
             }
         }
         add(event("[context] {}={}", key, values.length == 1 ? values[0] : values));
+    }
+
+    public void info(String key, Object... values) {
+        List<String> infoValues = info.computeIfAbsent(key, k -> new ArrayList<>(Math.max(2, values.length)));
+        for (Object value : values) {
+            String infoValue = String.valueOf(value);
+            // currently, we just reuse the context values constrains on info values
+            if (infoValue.length() > MAX_CONTEXT_VALUE_LENGTH) {
+                process(new LogEvent(LOGGER, Markers.errorCode("CONTEXT_INFO_TOO_LARGE"), WARN, "info value is too long, key={}, value={}", new Object[]{key, infoValue}, new Error("info value is too long")));
+            } else if (infoValues.size() >= MAX_CONTEXT_VALUES_SIZE) {
+                if (!"CONTEXT_INFO_TOO_LARGE".equals(errorCode))
+                    process(new LogEvent(LOGGER, Markers.errorCode("CONTEXT_INFO_TOO_LARGE"), WARN, "too many info values, key={}, size={}", new Object[]{key, infoValues.size()}, new Error("too many info values")));
+            } else {
+                infoValues.add(infoValue);
+            }
+        }
+        add(event("[info] {}={}", key, values.length == 1 ? values[0] : values));
     }
 
     public void stat(String key, double value) {

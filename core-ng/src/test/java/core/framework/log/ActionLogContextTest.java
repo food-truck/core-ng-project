@@ -19,6 +19,8 @@ class ActionLogContextTest {
 
         ActionLogContext.stat("stat", 1);
 
+        ActionLogContext.info("key", "value");
+
         assertThat(ActionLogContext.track("db", 100)).isEqualTo(1);
     }
 
@@ -33,6 +35,8 @@ class ActionLogContextTest {
         assertThat(ActionLogContext.get("key")).isEmpty();
         ActionLogContext.put("key", "value");
         assertThat(ActionLogContext.get("key")).contains("value");
+
+        ActionLogContext.info("key", "value");
 
         assertThat(ActionLogContext.track("db", 100)).isEqualTo(1);
         assertThat(ActionLogContext.track("db", 100)).isEqualTo(2);

@@ -44,6 +44,37 @@ class ActionLogTest {
     }
 
     @Test
+    void singleInfoValue() {
+        log.info("key", "value1");
+        assertThat(log.info).containsEntry("key", List.of("value1"));
+    }
+
+    @Test
+    void multipleInfoValues() {
+        log.info("key", "value1");
+        log.info("key", "value2");
+        assertThat(log.info).containsEntry("key", List.of("value1", "value2"));
+    }
+
+    @Test
+    void infoValueIsTooLong() {
+        log.info("key", "x".repeat(ActionLog.MAX_CONTEXT_VALUE_LENGTH + 1));
+        assertThat(log.result()).isEqualTo("WARN");
+        assertThat(log.errorMessage).contains("info value is too long");
+        assertThat(log.info.get("key")).isEmpty();
+    }
+
+    @Test
+    void tooManyInfoValues() {
+        for (int i = 0; i < ActionLog.MAX_CONTEXT_VALUES_SIZE + 10; i++) {
+            log.info("key", i);
+        }
+        assertThat(log.result()).isEqualTo("WARN");
+        assertThat(log.errorMessage).contains("too many info values");
+        assertThat(log.info.get("key")).hasSize(ActionLog.MAX_CONTEXT_VALUES_SIZE);
+    }
+
+    @Test
     void flushTraceLogWithTrace() {
         log.trace = Trace.CURRENT;
         assertThat(log.flushTraceLog()).isTrue();

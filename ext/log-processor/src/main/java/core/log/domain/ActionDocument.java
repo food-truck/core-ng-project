@@ -43,4 +43,6 @@ public class ActionDocument {
     public Map<String, Double> stats;
     @Property(name = "perf_stats")
     public Map<String, PerformanceStatMessage> performanceStats;
+    @Property(name = "info")
+    public Map<String, List<String>> info;
 }

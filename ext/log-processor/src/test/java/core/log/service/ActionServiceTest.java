@@ -43,6 +43,7 @@ class ActionServiceTest extends IntegrationTest {
     void index() {
         ActionLogMessage message1 = message("1", "OK");
         message1.context = Map.of("key", List.of("value"));
+        message1.info = Map.of("info", List.of("value"));
         message1.stats = Map.of("count", 1d);
         message1.correlationIds = List.of("id1", "id2");
         message1.clients = List.of("client");
@@ -67,7 +68,7 @@ class ActionServiceTest extends IntegrationTest {
         assertThat(action.clients).isEqualTo(message1.clients);
         assertThat(action.performanceStats.get("redis")).usingRecursiveComparison().isEqualTo(message1.performanceStats.get("redis"));
         assertThat(action.context).containsEntry("key", List.of("value"));
-
+        assertThat(action.info).containsEntry("info", List.of("value"));
         TraceDocument trace = traceDocument(now, message2.id);
         assertThat(trace.content).isEqualTo(message2.traceLog);
 
