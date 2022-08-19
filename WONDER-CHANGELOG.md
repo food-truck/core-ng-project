@@ -1,6 +1,6 @@
 ## Change Log In Wonder
 
-### 1.3.0 ()
+### 1.3.0 (08/19/2022)
 * corresponds to upstream version **7.10.6**
 * bean validator: remove calling of BeanClassNameValidator, since we can’t coordinate all teams prevent them to use the same class name
 * search: support extendSearch() for extra search cases in Wonder
