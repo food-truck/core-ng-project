@@ -26,6 +26,7 @@ public class ActionLogMessageFactory {
         message.errorCode = log.errorCode();
         message.errorMessage = log.errorMessage;
         message.context = log.context;
+        message.info = log.info;
         message.stats = log.stats;
         message.performanceStats = performanceStats(log.performanceStats);
         if (log.flushTraceLog()) {
