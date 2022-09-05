@@ -10,6 +10,7 @@ import core.framework.log.message.StatMessage;
 import core.framework.module.App;
 import core.framework.search.module.SearchConfig;
 import core.log.LogForwardConfig;
+import core.log.LogGroupConfig;
 import core.log.domain.ActionDocument;
 import core.log.domain.EventDocument;
 import core.log.domain.StatDocument;
@@ -31,6 +32,7 @@ import core.log.service.StatService;
 
 import java.time.Duration;
 import java.time.LocalTime;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -47,7 +49,8 @@ public class LogProcessorApp extends App {
 
         configureIndexOption();
         IndexService indexService = bind(IndexService.class);
-        bind(ActionService.class);
+        ActionService actionService = bind(ActionService.class);
+        actionService.applicationGroupMapping(logGroupConfig());
         bind(StatService.class);
         bind(EventService.class);
 
@@ -146,6 +149,17 @@ public class LogProcessorApp extends App {
             }
         }
         return forwarders;
+    }
+
+    private LogGroupConfig logGroupConfig() {
+        String logGroupConfigValue = property("app.log.group.mapping").orElse(null);
+        if (logGroupConfigValue != null) {
+            Bean.register(LogGroupConfig.class);
+            return Bean.fromJSON(LogGroupConfig.class, logGroupConfigValue);
+        }
+        LogGroupConfig logGroupConfig = new LogGroupConfig();
+        logGroupConfig.groups = Map.of();
+        return logGroupConfig;
     }
 
     static class Forwarders {

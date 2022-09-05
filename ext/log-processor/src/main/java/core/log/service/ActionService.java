@@ -8,6 +8,7 @@ import core.framework.search.ElasticSearchType;
 import core.framework.search.IndexRequest;
 import core.framework.util.Maps;
 import core.framework.util.Strings;
+import core.log.LogGroupConfig;
 import core.log.domain.ActionDocument;
 import core.log.domain.TraceDocument;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ import java.util.Map;
  */
 public class ActionService {
     private final Logger logger = LoggerFactory.getLogger(ActionService.class);
+    private final Map<String, String> applicationGroupMapping = Maps.newHashMap();
 
     @Inject
     IndexService indexService;
@@ -29,6 +31,15 @@ public class ActionService {
     ElasticSearchType<ActionDocument> actionType;
     @Inject
     ElasticSearchType<TraceDocument> traceType;
+
+    public void applicationGroupMapping(LogGroupConfig logGroupConfig) {
+        logGroupConfig.groups.forEach((group, apps) -> apps.forEach(app -> {
+            String previous = applicationGroupMapping.put(app, group);
+            if (previous != null) {
+                logger.warn(Markers.errorCode("DUPLICATED_APP_DETECTED"), "duplicated app {} detected, current group {}, previous group {}", app, group, previous);
+            }
+        }));
+    }
 
     public void index(List<ActionLogMessage> messages) {
         index(messages, LocalDate.now());
@@ -44,15 +55,15 @@ public class ActionService {
                 index(message, now);
             }
         } else {
-            Map<String, Map<String, ActionDocument>> actionGroups = Maps.newHashMap();
+            Map<String, Map<String, ActionDocument>> appActions = Maps.newHashMap();
             Map<String, TraceDocument> traces = Maps.newHashMap();
             for (ActionLogMessage message : messages) {
-                actionGroups.computeIfAbsent(message.app, k -> Maps.newHashMap()).put(message.id, action(message));
+                appActions.computeIfAbsent(message.app, k -> Maps.newHashMap()).put(message.id, action(message));
                 if (message.traceLog != null) {
                     traces.put(message.id, trace(message));
                 }
             }
-            actionGroups.forEach((group, actions) -> indexActions(group, actions, now));
+            appActions.forEach((app, actions) -> indexActions(app, actions, now));
             if (!traces.isEmpty()) {
                 indexTraces(traces, now);
             }
@@ -82,14 +93,14 @@ public class ActionService {
         traceType.index(request);
     }
 
-    private void indexActions(String group, Map<String, ActionDocument> actions, LocalDate now) {
+    private void indexActions(String app, Map<String, ActionDocument> actions, LocalDate now) {
         try {
             BulkIndexRequest<ActionDocument> request = new BulkIndexRequest<>();
-            request.index = indexService.indexName(actionIndexName(group), now);
+            request.index = indexService.indexName(actionIndexName(app), now);
             request.sources = actions;
             actionType.bulkIndex(request);
         } catch (Exception e) {
-            logger.error(Markers.errorCode("BULK_INDEX_FAILED"), Strings.format("bulk index for {} failed", group), e);
+            logger.error(Markers.errorCode("BULK_INDEX_FAILED"), Strings.format("bulk index for {} failed", app), e);
         }
     }
 
@@ -132,8 +143,9 @@ public class ActionService {
         return document;
     }
 
-    String actionIndexName(String group) {
-        if (Strings.isBlank(group)) {
+    String actionIndexName(String application) {
+        String group = applicationGroupMapping.get(application);
+        if (group == null) {
             return "action";
         }
         return "action-" + group;

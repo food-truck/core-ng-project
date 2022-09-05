@@ -10,6 +10,7 @@ import core.framework.search.GetRequest;
 import core.framework.search.SearchRequest;
 import core.framework.util.Lists;
 import core.log.IntegrationTest;
+import core.log.LogGroupConfig;
 import core.log.domain.ActionDocument;
 import core.log.domain.TraceDocument;
 import org.junit.jupiter.api.Test;
@@ -107,26 +108,39 @@ class ActionServiceTest extends IntegrationTest {
 
     @Test
     void testActionGroup() {
+        String app1 = "test-service";
+        String app2 = "test-service2";
+        var logGroupConfig = new LogGroupConfig();
+        logGroupConfig.groups = Map.of("test", List.of(app1), "test2", List.of(app2));
+        actionService.applicationGroupMapping(logGroupConfig);
+
         ActionLogMessage message = message("1", "OK");
-        message.app = "test-service";
+        message.app = app1;
         LocalDate now = LocalDate.of(2022, Month.JULY, 26);
         actionService.index(List.of(message), now);
         ActionDocument action = actionDocument(message.app, now, message.id);
-        assertThat(action.app).isEqualTo(message.app);
+        assertThat(action.id).isEqualTo(message.id);
 
         List<ActionLogMessage> messages = Lists.newArrayList();
         for (int i = 0; i < 6; i++) {
             message = message("bulk-" + i, "OK");
-            message.app = "test-service-" + i;
+            message.app = app2;
             messages.add(message);
         }
         actionService.index(messages, now);
         ActionLogMessage message0 = messages.get(0);
         ActionDocument action0 = actionDocument(message0.app, now, message0.id);
-        assertThat(action0.app).isEqualTo(message0.app);
+        assertThat(action0.id).isEqualTo(message0.id);
         ActionLogMessage message2 = messages.get(2);
         ActionDocument action2 = actionDocument(message2.app, now, message2.id);
-        assertThat(action2.app).isEqualTo(message2.app);
+        assertThat(action2.id).isEqualTo(message2.id);
+
+        ActionLogMessage message3 = message("message3", "OK");
+        message3.app = "test-service3";
+        now = LocalDate.of(2022, Month.JULY, 26);
+        actionService.index(List.of(message3), now);
+        ActionDocument action3 = actionDocument(message3.app, now, message3.id);
+        assertThat(action3.id).isEqualTo(message3.id);
     }
 
     private ActionDocument actionDocument(LocalDate now, String id) {
@@ -136,9 +150,9 @@ class ActionServiceTest extends IntegrationTest {
         return actionType.get(request).orElseThrow(() -> new Error("not found"));
     }
 
-    private ActionDocument actionDocument(String group, LocalDate now, String id) {
+    private ActionDocument actionDocument(String app, LocalDate now, String id) {
         var request = new GetRequest();
-        request.index = indexService.indexName(actionService.actionIndexName(group), now);
+        request.index = indexService.indexName(actionService.actionIndexName(app), now);
         request.id = id;
         return actionType.get(request).orElseThrow(() -> new Error("not found"));
     }
