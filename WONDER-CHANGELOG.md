@@ -1,5 +1,10 @@
 ## Change Log In Wonder
 
+### 1.3.1 (09/08/2022)
+* log-processor: change action index name separation from app level to group level.
+* log-processor: add `app.log.group.mapping` property to load action log group mapping.
+* action log context: add info support. use ActionLogContext.info() to add info value.
+
 ### 1.3.0 (08/19/2022)
 * corresponds to upstream version **7.10.6**
 * bean validator: remove calling of BeanClassNameValidator, since we can’t coordinate all teams prevent them to use the same class name
