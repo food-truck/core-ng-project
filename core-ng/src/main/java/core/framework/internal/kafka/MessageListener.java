@@ -6,9 +6,13 @@ import core.framework.kafka.MessageHandler;
 import core.framework.util.Maps;
 import core.framework.util.Network;
 import core.framework.util.StopWatch;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.config.SaslConfigs;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
+import org.apache.kafka.common.security.scram.internals.ScramMechanism;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +37,7 @@ public class MessageListener {
     private final Logger logger = LoggerFactory.getLogger(MessageListener.class);
     private final KafkaURI uri;
     private final String name;
+    private final String scram256JaasConfig;
 
     public int poolSize = Runtime.getRuntime().availableProcessors() * 4;
     public long longConsumerDelayThresholdInNano = Duration.ofSeconds(60).toNanos();
@@ -46,12 +51,13 @@ public class MessageListener {
     volatile boolean shutdown;
     private MessageListenerThread[] threads;
 
-    public MessageListener(KafkaURI uri, String name, LogManager logManager, long maxProcessTimeInNano) {
+    public MessageListener(KafkaURI uri, String name, LogManager logManager, long maxProcessTimeInNano, String scram256JaasConfig) {
         this.uri = uri;
         this.name = name;
         this.logManager = logManager;
         this.maxProcessTimeInNano = maxProcessTimeInNano;
         this.consumerMetrics = new ConsumerMetrics(name);
+        this.scram256JaasConfig = scram256JaasConfig;
     }
 
     public <T> void subscribe(String topic, Class<T> messageClass, MessageHandler<T> handler, BulkMessageHandler<T> bulkHandler) {
@@ -64,7 +70,7 @@ public class MessageListener {
         threads = new MessageListenerThread[poolSize];
         for (int i = 0; i < poolSize; i++) {
             String name = listenerThreadName(this.name, i);
-            Consumer<byte[], byte[]> consumer = createConsumer();
+            Consumer<byte[], byte[]> consumer = scram256JaasConfig == null ? createConsumer() : createScram256Consumer();
             threads[i] = new MessageListenerThread(name, consumer, this);
         }
         for (var thread : threads) {
@@ -119,6 +125,36 @@ public class MessageListener {
             config.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, maxPollBytes);
             config.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, minPollBytes);
             config.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, (int) maxWaitTime.toMillis());
+            var deserializer = new ByteArrayDeserializer();
+            Consumer<byte[], byte[]> consumer = new KafkaConsumer<>(config, deserializer, deserializer);
+            consumerMetrics.add(consumer.metrics());
+
+            consumer.subscribe(topics);
+            return consumer;
+        } finally {
+            logger.info("create kafka consumer, topics={}, name={}, elapsed={}", topics, name, watch.elapsed());
+        }
+    }
+
+    Consumer<byte[], byte[]> createScram256Consumer() {
+        var watch = new StopWatch();
+        try {
+            Map<String, Object> config = Maps.newHashMapWithExpectedSize(12);
+            config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, uri.bootstrapURIs);
+            config.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+            config.put(ConsumerConfig.CLIENT_ID_CONFIG, Network.LOCAL_HOST_NAME + "-" + CONSUMER_CLIENT_ID_SEQUENCE.getAndIncrement());      // will show in monitor metrics
+            config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, Boolean.FALSE);
+            config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");                      // refer to org.apache.kafka.clients.consumer.ConsumerConfig, must be in("latest", "earliest", "none")
+            config.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 1_800_000);                  // 30min as max process time for each poll
+            config.put(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, 500L);                       // longer backoff to reduce cpu usage when kafka is not available
+            config.put(ConsumerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, 5_000L);                 // 5s
+            config.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPollRecords);
+            config.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, maxPollBytes);
+            config.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, minPollBytes);
+            config.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, (int) maxWaitTime.toMillis());
+            config.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SASL_PLAINTEXT.name());
+            config.put(SaslConfigs.SASL_MECHANISM, ScramMechanism.SCRAM_SHA_256.mechanismName());
+            config.put(SaslConfigs.SASL_JAAS_CONFIG, scram256JaasConfig);
             var deserializer = new ByteArrayDeserializer();
             Consumer<byte[], byte[]> consumer = new KafkaConsumer<>(config, deserializer, deserializer);
             consumerMetrics.add(consumer.metrics());

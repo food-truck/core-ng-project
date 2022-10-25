@@ -1,13 +1,18 @@
 package core.framework.internal.kafka;
 
+import core.framework.util.Maps;
 import core.framework.util.StopWatch;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.record.CompressionType;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
+import org.apache.kafka.common.security.scram.internals.ScramMechanism;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,16 +32,22 @@ public class MessageProducer {
     private final String name;
     private final int maxRequestSize;
     private Producer<byte[], byte[]> producer;
+    private final String scram256JaasConfig;
 
-    public MessageProducer(KafkaURI uri, String name, int maxRequestSize) {
+    public MessageProducer(KafkaURI uri, String name, int maxRequestSize, String scram256JaasConfig) {
         this.uri = uri;
         this.name = name;
         this.maxRequestSize = maxRequestSize;
         this.producerMetrics = new ProducerMetrics(name);
+        this.scram256JaasConfig = scram256JaasConfig;
     }
 
     public void initialize() {
-        producer = createProducer(uri);
+        if (scram256JaasConfig == null) {
+            producer = createProducer(uri);
+        } else {
+            producer = createScram256Producer(uri);
+        }
     }
 
     public void send(ProducerRecord<byte[], byte[]> record) {
@@ -54,6 +65,31 @@ public class MessageProducer {
                 ProducerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, 5_000L,                      // 5s
                 ProducerConfig.MAX_BLOCK_MS_CONFIG, 30_000L,                                 // 30s, metadata update timeout, shorter than default, to get exception sooner if kafka is not available
                 ProducerConfig.MAX_REQUEST_SIZE_CONFIG, maxRequestSize);
+
+            var serializer = new ByteArraySerializer();
+            var producer = new KafkaProducer<>(config, serializer, serializer);
+            producerMetrics.set(producer.metrics());
+            return producer;
+        } finally {
+            logger.info("create kafka producer, uri={}, name={}, elapsed={}", uri, name, watch.elapsed());
+        }
+    }
+
+    Producer<byte[], byte[]> createScram256Producer(KafkaURI uri) {
+        var watch = new StopWatch();
+        try {
+            Map<String, Object> config = Maps.newHashMapWithExpectedSize(11);
+            config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, uri.bootstrapURIs);
+            config.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, CompressionType.SNAPPY.name);
+            config.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 60_000);                          // 60s, DELIVERY_TIMEOUT_MS_CONFIG is INT type
+            config.put(ProducerConfig.LINGER_MS_CONFIG, 5L);                                        // use small linger time within acceptable range to improve batching
+            config.put(ProducerConfig.RECONNECT_BACKOFF_MS_CONFIG, 500L);                           // longer backoff to reduce cpu uxsage when kafka is not available
+            config.put(ProducerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, 5_000L);                     // 5s
+            config.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 30_000L);                                // 30s, metadata update timeout, shorter than default, to get exception soonxer if kafka is not available
+            config.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, maxRequestSize);
+            config.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SASL_PLAINTEXT.name());
+            config.put(SaslConfigs.SASL_MECHANISM, ScramMechanism.SCRAM_SHA_256.mechanismName());
+            config.put(SaslConfigs.SASL_JAAS_CONFIG, scram256JaasConfig);
 
             var serializer = new ByteArraySerializer();
             var producer = new KafkaProducer<>(config, serializer, serializer);

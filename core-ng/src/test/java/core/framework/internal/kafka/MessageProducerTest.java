@@ -18,7 +18,7 @@ class MessageProducerTest {
 
     @BeforeEach
     void createMessageProducer() {
-        producer = new MessageProducer(null, null, 1024);
+        producer = new MessageProducer(null, null, 1024, null);
     }
 
     @Test

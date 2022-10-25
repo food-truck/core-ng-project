@@ -44,7 +44,7 @@ class MessageListenerThreadTest {
     @BeforeEach
     void createKafkaMessageListenerThread() {
         logManager = new LogManager();
-        thread = new MessageListenerThread("listener-thread-1", consumer, new MessageListener(null, null, logManager, 300_000L));
+        thread = new MessageListenerThread("listener-thread-1", consumer, new MessageListener(null, null, logManager, 300_000L, null));
     }
 
     @Test
@@ -131,8 +131,8 @@ class MessageListenerThreadTest {
         thread.handleBulk("topic", new MessageProcess<>(null, bulkMessageHandler, TestMessage.class), List.of(record));
 
         verify(bulkMessageHandler).handle(argThat(value -> value.size() == 1
-                                                           && key.equals(value.get(0).key)
-                                                           && "value".equals(value.get(0).value.stringField)));
+            && key.equals(value.get(0).key)
+            && "value".equals(value.get(0).value.stringField)));
     }
 
     @Test

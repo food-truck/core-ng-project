@@ -35,6 +35,7 @@ public class KafkaConfig extends Config {
     private boolean handlerAdded;
     private int maxRequestSize = 1024 * 1024;   // default 1M, refer to org.apache.kafka.clients.producer.ProducerConfig.MAX_REQUEST_SIZE_CONFIG
     private KafkaController controller;
+    private String scram256JaasConfig;
 
     @Override
     protected void initialize(ModuleContext context, String name) {
@@ -77,7 +78,7 @@ public class KafkaConfig extends Config {
 
     <T> MessagePublisher<T> createMessagePublisher(String topic, Class<T> messageClass) {
         if (producer == null) {
-            var producer = new MessageProducer(uri, name, maxRequestSize);
+            var producer = new MessageProducer(uri, name, maxRequestSize, scram256JaasConfig);
             context.collector.metrics.add(producer.producerMetrics);
             context.startupHook.initialize.add(producer::initialize);
             context.shutdownHook.add(ShutdownHook.STAGE_4, producer::close);
@@ -115,7 +116,7 @@ public class KafkaConfig extends Config {
     private MessageListener listener() {
         if (listener == null) {
             if (uri == null) throw new Error("kafka uri must be configured first, name=" + name);
-            var listener = new MessageListener(uri, name, context.logManager, context.shutdownHook.shutdownTimeoutInNano);
+            var listener = new MessageListener(uri, name, context.logManager, context.shutdownHook.shutdownTimeoutInNano, scram256JaasConfig);
             context.startupHook.start.add(listener::start);
             context.shutdownHook.add(ShutdownHook.STAGE_0, timeout -> listener.shutdown());
             context.shutdownHook.add(ShutdownHook.STAGE_1, listener::awaitTermination);
@@ -170,5 +171,9 @@ public class KafkaConfig extends Config {
         MessageListener listener = listener();
         listener.minPollBytes = minBytes;
         listener.maxWaitTime = maxWaitTime;
+    }
+
+    public void scram256JaasConfig(String scram256JaasConfig) {
+        this.scram256JaasConfig = scram256JaasConfig;
     }
 }
