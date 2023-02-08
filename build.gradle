@@ -1,18 +1,10 @@
 apply from: file("${rootDir}/gradle/project.gradle")
+apply from: file("${rootDir}/gradle/azure-maven.gradle")
 apply from: file("${rootDir}/gradle/publish.gradle")
 
 subprojects {
     group = 'core.framework'
     version = '7.10.6'
-
-    repositories {
-        maven {
-            url 'https://neowu.github.io/maven-repo/'
-            content {
-                includeGroupByRegex 'core\\.framework.*'       // for elasticsearch modules dependencies
-            }
-        }
-    }
 }
 
 def elasticVersion = '8.1.3'
@@ -121,11 +113,11 @@ project('core-ng-search-test') {
         implementation project(':core-ng-test')
         implementation project(':core-ng-search')
         implementation "org.elasticsearch:elasticsearch:${elasticVersion}"
-        implementation "core.framework.elasticsearch.module:transport-netty4:${elasticVersion}"
-        implementation "core.framework.elasticsearch.module:mapper-extras:${elasticVersion}"    // used by elasticsearch scaled_float
-        implementation "core.framework.elasticsearch.module:lang-painless:${elasticVersion}"
-        implementation "core.framework.elasticsearch.module:analysis-common:${elasticVersion}"  // used by elasticsearch stemmer
-        implementation "core.framework.elasticsearch.module:reindex:${elasticVersion}"  // used by elasticsearch deleteByQuery
+        implementation "com.wonder.elasticsearch.module:transport-netty4:${elasticVersion}.hotfix"
+        implementation "com.wonder.elasticsearch.module:mapper-extras:${elasticVersion}.hotfix"    // used by elasticsearch scaled_float
+        implementation "com.wonder.elasticsearch.module:lang-painless:${elasticVersion}.hotfix"
+        implementation "com.wonder.elasticsearch.module:analysis-common:${elasticVersion}.hotfix"  // used by elasticsearch stemmer
+        implementation "com.wonder.elasticsearch.module:reindex:${elasticVersion}.hotfix"  // used by elasticsearch deleteByQuery
         implementation "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"              // override transitive jackson dependencies of elasticsearch, only for intellij, gradle woks fine
     }
 }
