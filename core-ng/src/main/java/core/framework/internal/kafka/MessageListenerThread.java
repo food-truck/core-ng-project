@@ -3,6 +3,7 @@ package core.framework.internal.kafka;
 import core.framework.internal.json.JSONReader;
 import core.framework.internal.log.ActionLog;
 import core.framework.internal.log.LogManager;
+import core.framework.internal.log.PerformanceWarning;
 import core.framework.internal.log.Trace;
 import core.framework.internal.log.filter.BytesLogParam;
 import core.framework.kafka.Message;
@@ -71,7 +72,7 @@ class MessageListenerThread extends Thread {
                 processRecords(records);
             } catch (Throwable e) {
                 if (!listener.shutdown) {
-                    logger.error("failed to pull message, retry in 10 seconds", e);
+                    logger.error("failed to pull messages, retry in 10 seconds", e);
                     Threads.sleepRoughly(Duration.ofSeconds(10));
                 }
             }
@@ -124,7 +125,7 @@ class MessageListenerThread extends Thread {
             }
         } finally {
             consumer.commitAsync();
-            logger.info("process kafka records, count={}, size={}, elapsed={}", count, size, watch.elapsed());
+            logger.info("process kafka messages, count={}, size={}, elapsed={}", count, size, watch.elapsed());
         }
     }
 
@@ -132,7 +133,7 @@ class MessageListenerThread extends Thread {
         for (ConsumerRecord<byte[], byte[]> record : records) {
             ActionLog actionLog = logManager.begin("=== message handling begin ===", null);
             try {
-                initAction(actionLog, topic, process.handler.getClass().getCanonicalName());
+                initAction(actionLog, topic, process.handler.getClass().getCanonicalName(), process.warnings);
 
                 actionLog.track("kafka", 0, 1, 0);
 
@@ -169,7 +170,7 @@ class MessageListenerThread extends Thread {
     <T> void handleBulk(String topic, MessageProcess<T> process, List<ConsumerRecord<byte[], byte[]>> records) {
         ActionLog actionLog = logManager.begin("=== message handling begin ===", null);
         try {
-            initAction(actionLog, topic, process.bulkHandler.getClass().getCanonicalName());
+            initAction(actionLog, topic, process.bulkHandler.getClass().getCanonicalName(), process.warnings);
 
             List<Message<T>> messages = messages(records, actionLog, process.reader);
             for (Message<T> message : messages) {   // validate after fromJSON, so it can track refId/correlationId
@@ -184,12 +185,13 @@ class MessageListenerThread extends Thread {
         }
     }
 
-    private void initAction(ActionLog actionLog, String topic, String handler) {
+    private void initAction(ActionLog actionLog, String topic, String handler, PerformanceWarning[] warnings) {
         actionLog.action("topic:" + topic);
-        actionLog.maxProcessTime(listener.maxProcessTimeInNano);
+        actionLog.warningContext.maxProcessTimeInNano(listener.maxProcessTimeInNano);
         actionLog.context.put("topic", List.of(topic));
         actionLog.context.put("handler", List.of(handler));
         logger.debug("topic={}, handler={}", topic, handler);
+        if (warnings != null) actionLog.initializeWarnings(warnings);
     }
 
     <T> List<Message<T>> messages(List<ConsumerRecord<byte[], byte[]>> records, ActionLog actionLog, JSONReader<T> reader) throws IOException {
@@ -250,7 +252,11 @@ class MessageListenerThread extends Thread {
         long delay = (actionLog.date.toEpochMilli() - timestamp) * 1_000_000;     // convert to nanoseconds
         logger.debug("consumerDelay={}", Duration.ofNanos(delay));
         actionLog.stats.put("consumer_delay", (double) delay);
-        if (delay > longConsumerDelayThresholdInNano) {
+        // refer to core.framework.internal.kafka.MessageListener.createConsumer, MAX_POLL_INTERVAL_MS_CONFIG = 30 mins
+        // log as error if delay > 15 mins
+        if (delay > 900_000_000_000L) {
+            logger.error(errorCode("LONG_CONSUMER_DELAY"), "consumer delay is too long, delay={}", Duration.ofNanos(delay));
+        } else if (delay > longConsumerDelayThresholdInNano) {
             logger.warn(errorCode("LONG_CONSUMER_DELAY"), "consumer delay is too long, delay={}", Duration.ofNanos(delay));
         }
     }

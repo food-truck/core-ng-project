@@ -54,8 +54,10 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
 
     @AfterEach
     void cleanup() {
-        documentType.bulkDelete(range(0, 100).mapToObj(String::valueOf).toList());
-        elasticSearch.refreshIndex("document");
+        var request = new BulkDeleteRequest();
+        request.ids = range(0, 100).mapToObj(String::valueOf).toList();
+        request.refresh = Boolean.TRUE;
+        documentType.bulkDelete(request);
     }
 
     @Test
@@ -90,7 +92,7 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
 
         ForEach<TestDocument> forEach = new ForEach<>();
         forEach.query = new Query.Builder().matchAll(m -> m).build();
-        forEach.limit = 7;
+        forEach.batchSize = 7;
         forEach.consumer = results::add;
 
         documentType.forEach(forEach);
@@ -173,10 +175,9 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     @Test
     void delete() {
         documentType.index("1", document("1", "value", 1, 0, null, null));
-        elasticSearch.refreshIndex("document");
 
-        boolean result = documentType.delete("1");
-        assertThat(result).isTrue();
+        boolean deleted = documentType.delete("1");
+        assertThat(deleted).isTrue();
     }
 
     @Test
@@ -199,7 +200,6 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     void bulkDelete() {
         documentType.index("1", document("1", "value1", 1, 0, null, null));
         documentType.index("2", document("2", "value2", 2, 0, null, null));
-        elasticSearch.refreshIndex("document");
 
         var request = new BulkDeleteRequest();
         request.ids = List.of("1", "2");
@@ -226,9 +226,33 @@ class ElasticSearchIntegrationTest extends IntegrationTest {
     void update() {
         documentType.index("4", document("4", "value4", 4, 0, null, null));
 
-        documentType.update("4", "ctx._source.int_field = ctx._source.int_field + params.value", Map.of("value", 1));
-
+        boolean updated = documentType.update("4", "ctx._source.int_field = ctx._source.int_field + params.value", Map.of("value", 1));
+        assertThat(updated).isTrue();
         assertThat(documentType.get("4").orElseThrow().intField).isEqualTo(5);
+
+        updated = documentType.update("4", "if (ctx._source.int_field != 5) { ctx._source.int_field = 5 } else { ctx.op = 'noop' }", Map.of());
+        assertThat(documentType.get("4").orElseThrow().intField).isEqualTo(5);
+        assertThat(updated).isFalse();
+    }
+
+    @Test
+    void partialUpdate() {
+        documentType.index("5", document("5", "value4", 4, 0, null, null));
+
+        var document = new TestDocument();
+        document.stringField = "value5";
+        document.localTimeField = LocalTime.now();
+        boolean updated = documentType.partialUpdate("5", document);
+        assertThat(updated).isTrue();
+
+        TestDocument result = documentType.get("5").orElseThrow();
+        assertThat(result.stringField).isEqualTo("value5");
+        assertThat(result.intField).isEqualTo(4);
+        assertThat(result.localTimeField).isEqualTo(document.localTimeField);
+        assertThat(result.zonedDateTimeField).isNull();
+
+        updated = documentType.partialUpdate("5", document);
+        assertThat(updated).isFalse();
     }
 
     @Test

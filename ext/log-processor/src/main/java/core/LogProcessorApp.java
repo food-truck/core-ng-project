@@ -8,6 +8,7 @@ import core.framework.log.message.EventMessage;
 import core.framework.log.message.LogTopics;
 import core.framework.log.message.StatMessage;
 import core.framework.module.App;
+import core.framework.module.KafkaConfig;
 import core.framework.search.module.SearchConfig;
 import core.log.LogForwardConfig;
 import core.log.domain.ActionDocument;
@@ -19,14 +20,11 @@ import core.log.kafka.ActionLogMessageHandler;
 import core.log.kafka.EventMessageHandler;
 import core.log.kafka.StatMessageHandler;
 import core.log.service.ActionLogForwarder;
-import core.log.service.ActionService;
 import core.log.service.EventForwarder;
-import core.log.service.EventService;
 import core.log.service.IndexOption;
 import core.log.service.IndexService;
 import core.log.service.JobConfig;
 import core.log.service.KibanaService;
-import core.log.service.StatService;
 
 import java.time.Duration;
 import java.time.LocalTime;
@@ -46,13 +44,10 @@ public class LogProcessorApp extends App {
 
         configureIndexOption();
         IndexService indexService = bind(IndexService.class);
-        bind(ActionService.class);
-        bind(StatService.class);
-        bind(EventService.class);
-
         onStartup(indexService::createIndexTemplates);
 
         configureKibanaService();
+
         Forwarders forwarders = configureLogForwarders();
         configureKafka(forwarders);
         configureJob();
@@ -94,7 +89,6 @@ public class LogProcessorApp extends App {
         search.host(requiredProperty("sys.elasticsearch.host"));
         property("sys.elasticsearch.apiKey").ifPresent(search::auth);
         search.timeout(Duration.ofSeconds(20)); // use longer timeout/slowES threshold as log indexing can be slower with large batches
-        search.slowOperationThreshold(Duration.ofSeconds(10));
         search.type(ActionDocument.class);
         search.type(TraceDocument.class);
         search.type(StatDocument.class);
@@ -119,16 +113,15 @@ public class LogProcessorApp extends App {
         if (configValue != null) {
             Bean.register(LogForwardConfig.class);
             LogForwardConfig config = Bean.fromJSON(LogForwardConfig.class, configValue);
-            kafka("forward").uri(config.kafkaURI);
-            LogForwardConfig.Forward actionConfig = config.action;
-            if (actionConfig != null) {
-                MessagePublisher<ActionLogMessage> publisher = kafka("forward").publish(ActionLogMessage.class);
-                forwarders.action = new ActionLogForwarder(publisher, actionConfig.topic, actionConfig.apps, actionConfig.ignoreErrorCodes);
+            KafkaConfig kafka = kafka("forward");
+            kafka.uri(config.kafkaURI);
+            if (config.action != null) {
+                MessagePublisher<ActionLogMessage> publisher = kafka.publish(config.action.topic, ActionLogMessage.class);
+                forwarders.action = new ActionLogForwarder(publisher, config.action);
             }
-            LogForwardConfig.Forward eventConfig = config.event;
-            if (eventConfig != null) {
-                MessagePublisher<EventMessage> publisher = kafka("forward").publish(EventMessage.class);
-                forwarders.event = new EventForwarder(publisher, eventConfig.topic, eventConfig.apps, eventConfig.ignoreErrorCodes);
+            if (config.event != null) {
+                MessagePublisher<EventMessage> publisher = kafka.publish(config.event.topic, EventMessage.class);
+                forwarders.event = new EventForwarder(publisher, config.event);
             }
         }
         return forwarders;

@@ -45,10 +45,12 @@ class JSONTest {
         var child = new TestBean.Child();
         child.booleanField = Boolean.TRUE;
         child.longField = 200L;
+        child.doubleField = 2.3456;
         bean.childField = child;
 
         String json = JSON.toJSON(bean);
-        assertThat(json).contains("\"child\":{\"boolean\":true,\"long\":200}");
+        assertThat(json).contains("""
+            "child":{"boolean":true,"long":200,"double":2.3456}""");
 
         var parsedBean = JSON.fromJSON(TestBean.class, json);
         assertThat(parsedBean).usingRecursiveComparison().isEqualTo(bean);
@@ -68,7 +70,8 @@ class JSONTest {
         bean.childrenField.add(child2);
 
         String json = JSON.toJSON(bean);
-        assertThat(json).contains("\"list\":[\"value1\",\"value2\"],\"children\":[{\"boolean\":true,\"long\":null},{\"boolean\":false,\"long\":null}]");
+        assertThat(json).contains("""
+            "list":["value1","value2"],"children":[{"boolean":true,"long":null,"double":null},{"boolean":false,"long":null,"double":null}]""");
 
         TestBean parsedBean = JSON.fromJSON(TestBean.class, json);
         assertThat(parsedBean).usingRecursiveComparison().isEqualTo(bean);
@@ -194,6 +197,12 @@ class JSONTest {
             .isInstanceOf(UncheckedIOException.class);
 
         assertThatThrownBy(() -> JSON.fromJSON(Types.list(TestBean.class), "{"))
+            .isInstanceOf(UncheckedIOException.class);
+    }
+
+    @Test
+    void invalidInteger() {
+        assertThatThrownBy(() -> JSON.fromJSON(Integer.class, "\"\""))
             .isInstanceOf(UncheckedIOException.class);
     }
 }

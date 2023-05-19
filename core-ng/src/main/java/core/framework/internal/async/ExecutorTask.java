@@ -2,11 +2,13 @@ package core.framework.internal.async;
 
 import core.framework.internal.log.ActionLog;
 import core.framework.internal.log.LogManager;
+import core.framework.internal.log.PerformanceWarning;
 import core.framework.internal.log.Trace;
 import core.framework.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -27,6 +29,8 @@ public class ExecutorTask<T> implements Callable<T> {
     private final String refId;
     private final String correlationId;
     private final Trace trace;
+    @Nullable
+    private final PerformanceWarning[] warnings;
 
     ExecutorTask(Callable<T> task, LogManager logManager, TaskContext context) {
         this.task = task;
@@ -42,11 +46,13 @@ public class ExecutorTask<T> implements Callable<T> {
             correlationId = parentActionLog.correlationId();
             refId = parentActionLog.id;
             trace = parentActionLog.trace;
+            warnings = parentActionLog.warnings();
         } else {
             rootAction = null;
             correlationId = null;
             refId = null;
             trace = null;
+            warnings = null;
         }
     }
 
@@ -55,7 +61,7 @@ public class ExecutorTask<T> implements Callable<T> {
         try {
             ActionLog actionLog = logManager.begin("=== task execution begin ===", actionId);
             actionLog.action(action());
-            actionLog.maxProcessTime(maxProcessTimeInNano);
+            actionLog.warningContext.maxProcessTimeInNano(maxProcessTimeInNano);
             // here it doesn't log task class, is due to task usually is lambda or method reference, it's expensive to inspect, refer to ControllerInspector
             if (rootAction != null) { // if rootAction != null, then all parent info are available
                 actionLog.context("root_action", rootAction);
@@ -64,6 +70,7 @@ public class ExecutorTask<T> implements Callable<T> {
                 LOGGER.debug("refId={}", refId);
                 actionLog.refIds = List.of(refId);
                 if (trace == Trace.CASCADE) actionLog.trace = Trace.CASCADE;
+                if (warnings != null) actionLog.initializeWarnings(warnings);
             }
             LOGGER.debug("taskClass={}", CallableTask.taskClass(task).getName());
             Duration delay = Duration.between(startTime, actionLog.date);

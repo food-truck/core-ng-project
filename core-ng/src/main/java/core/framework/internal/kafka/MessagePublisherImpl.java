@@ -37,13 +37,6 @@ public class MessagePublisherImpl<T> implements MessagePublisher<T> {
 
     @Override
     public void publish(@Nullable String key, T value) {
-        publish(topic, key, value);
-    }
-
-    @Override
-    public void publish(String topic, @Nullable String key, T value) {
-        if (topic == null) throw new Error("topic must not be null");
-
         var watch = new StopWatch();
         byte[] keyBytes = key == null ? null : Strings.bytes(key);
         validator.validate(value, false);
@@ -54,12 +47,12 @@ public class MessagePublisherImpl<T> implements MessagePublisher<T> {
             producer.send(record);
         } finally {
             long elapsed = watch.elapsed();
+            logger.debug("publish, topic={}, key={}, message={}, elapsed={}", topic, key, new BytesLogParam(message), elapsed);
             ActionLog actionLog = LogManager.CURRENT_ACTION_LOG.get();
             if (actionLog != null) {
                 trackMaxMessageSize(actionLog, message.length);
                 actionLog.track("kafka", elapsed, 0, 1);   // kafka producer send message in background, the main purpose of track is to count how many message sent in action
             }
-            logger.debug("publish, topic={}, key={}, message={}, elapsed={}", topic, key, new BytesLogParam(message), elapsed);
         }
     }
 
