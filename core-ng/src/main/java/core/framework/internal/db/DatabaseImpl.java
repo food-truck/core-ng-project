@@ -10,7 +10,6 @@ import core.framework.db.UncheckedSQLException;
 import core.framework.internal.db.cloud.CloudAuthProvider;
 import core.framework.internal.db.cloud.GCloudAuthProvider;
 import core.framework.internal.log.ActionLog;
-import core.framework.internal.log.LogLevel;
 import core.framework.internal.log.LogManager;
 import core.framework.internal.resource.Pool;
 import core.framework.util.ASCII;
@@ -33,8 +32,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
-import static core.framework.log.Markers.errorCode;
-
 /**
  * @author neo
  */
@@ -53,24 +50,21 @@ public final class DatabaseImpl implements Database {
 
     public String user;
     public String password;
-    public int tooManyRowsReturnedThreshold = 1000;
-    public long slowOperationThresholdInNanos = Duration.ofSeconds(5).toNanos();
     public IsolationLevel isolationLevel;
-
-    int maxOperations = 2000;  // max db calls per action, if exceeds, it indicates either wrong impl (e.g. infinite loop with db calls) or bad practice (not CD friendly), better split into multiple actions
 
     private String url;
     private Properties driverProperties;
     private CloudAuthProvider authProvider;
     private Duration timeout;
     private Driver driver;
+    private Dialect dialect;
 
     public DatabaseImpl(String name) {
         initializeRowMappers();
 
         pool = new Pool<>(this::createConnection, name);
         pool.size(5, 50);    // default optimization for AWS medium/large instances
-        pool.maxIdleTime = Duration.ofHours(1);  // make sure db server does not kill connection shorter than this, e.g. MySQL default wait_timeout is 8 hours
+        pool.maxIdleTime = Duration.ofHours(2);  // make sure db server does not kill connection shorter than this, e.g. MySQL default wait_timeout is 8 hours
         pool.validator(connection -> connection.isValid(1), Duration.ofSeconds(30));
 
         operation = new DatabaseOperation(pool);
@@ -148,6 +142,11 @@ public final class DatabaseImpl implements Database {
             // refer to https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-charsets.html
             if (index == -1 || url.indexOf("characterEncoding=", index + 1) == -1)
                 properties.setProperty(PropertyKey.characterEncoding.getKeyName(), "utf-8");
+        } else if (url.startsWith("jdbc:postgresql:")) {
+            // refer to org.postgresql.PGProperty
+            properties.setProperty("connectTimeout", String.valueOf(timeout.toSeconds()));
+            properties.setProperty("socketTimeout", String.valueOf(timeout.toSeconds()));
+            properties.setProperty("reWriteBatchedInserts", "true");
         }
         return properties;
     }
@@ -181,8 +180,13 @@ public final class DatabaseImpl implements Database {
 
     private Driver driver(String url) {
         if (url.startsWith("jdbc:mysql:")) {
+            dialect = Dialect.MYSQL;
             return createDriver("com.mysql.cj.jdbc.Driver");
+        } else if (url.startsWith("jdbc:postgresql:")) {
+            dialect = Dialect.POSTGRESQL;
+            return createDriver("org.postgresql.Driver");
         } else if (url.startsWith("jdbc:hsqldb:")) {
+            dialect = Dialect.MYSQL;    // unit test use mysql dialect
             return createDriver("org.hsqldb.jdbc.JDBCDriver");
         } else {
             throw new Error("not supported database, url=" + url);
@@ -200,7 +204,7 @@ public final class DatabaseImpl implements Database {
     public <T> void view(Class<T> viewClass) {
         var watch = new StopWatch();
         try {
-            new DatabaseClassValidator(viewClass).validateViewClass();
+            new DatabaseClassValidator(viewClass, true).validate();
             registerViewClass(viewClass);
         } finally {
             logger.info("register db view, viewClass={}, elapsed={}", viewClass.getCanonicalName(), watch.elapsed());
@@ -210,9 +214,9 @@ public final class DatabaseImpl implements Database {
     public <T> Repository<T> repository(Class<T> entityClass) {
         var watch = new StopWatch();
         try {
-            new DatabaseClassValidator(entityClass).validateEntityClass();
+            new DatabaseClassValidator(entityClass, false).validate();
             registerViewClass(entityClass);
-            return new RepositoryImpl<>(this, entityClass);
+            return new RepositoryImpl<>(this, entityClass, dialect);
         } finally {
             logger.info("register db entity, entityClass={}, elapsed={}", entityClass.getCanonicalName(), watch.elapsed());
         }
@@ -235,8 +239,7 @@ public final class DatabaseImpl implements Database {
         } finally {
             long elapsed = watch.elapsed();
             logger.debug("select, sql={}, params={}, returnedRows={}, elapsed={}", sql, new SQLParams(operation.enumMapper, params), returnedRows, elapsed);
-            track(elapsed, returnedRows, 0, 1);
-            checkTooManyRowsReturned(returnedRows); // check returnedRows after sql debug log, to make log easier to read
+            track(elapsed, returnedRows, 0, 1);   // check after sql debug log, to make log easier to read
         }
     }
 
@@ -310,34 +313,11 @@ public final class DatabaseImpl implements Database {
         rowMappers.put(viewClass, mapper);
     }
 
-    private void checkTooManyRowsReturned(int size) {
-        if (size > tooManyRowsReturnedThreshold) {
-            logger.warn(errorCode("TOO_MANY_ROWS_RETURNED"), "too many rows returned, returnedRows={}", size);
-        }
-    }
-
     void track(long elapsed, int readRows, int writeRows, int queries) {
         ActionLog actionLog = LogManager.CURRENT_ACTION_LOG.get();
         if (actionLog != null) {
             actionLog.stats.compute("db_queries", (k, oldValue) -> (oldValue == null) ? queries : oldValue + queries);
-            int operations = actionLog.track("db", elapsed, readRows, writeRows);
-            checkOperations(actionLog, elapsed, operations);
-        }
-    }
-
-    private void checkOperations(ActionLog actionLog, long elapsed, int operations) {
-        // check default max operations first then check if specified action level max operations
-        if (operations > maxOperations && operations > actionLog.internalContext().maxDBOperations) {
-            if (actionLog.remainingProcessTimeInNano() <= 0) {
-                // break if it took too long and execute too many db queries
-                throw new Error("too many db operations, operations=" + operations);
-            }
-            if (actionLog.result == LogLevel.INFO) {    // only warn once, action hits here typically will call db more times ongoing
-                logger.warn(errorCode("TOO_MANY_DB_OPERATIONS"), "too many db operations, operations={}", operations);
-            }
-        }
-        if (elapsed > slowOperationThresholdInNanos) {
-            logger.warn(errorCode("SLOW_DB"), "slow db operation, elapsed={}", Duration.ofNanos(elapsed));
+            actionLog.track("db", elapsed, readRows, writeRows);
         }
     }
 

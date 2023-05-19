@@ -11,7 +11,6 @@ import core.framework.internal.log.filter.BytesLogParam;
 import core.framework.internal.web.http.IPv4AccessControl;
 import core.framework.json.JSON;
 import core.framework.kafka.Message;
-import core.framework.log.Markers;
 import core.framework.util.Strings;
 import core.framework.web.Request;
 import core.framework.web.Response;
@@ -22,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
+import static core.framework.log.Markers.errorCode;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
@@ -37,11 +37,12 @@ public class KafkaController {
         accessControl.validate(request.clientIP());
         String topic = request.pathParam("topic");
         String key = request.pathParam("key");
+        ActionLog actionLog = initAction(topic, key);
         byte[] body = request.body().orElseThrow(() -> new Error("body must not be null"));
 
-        logger.warn(Markers.errorCode("MANUAL_OPERATION"), "publish message manually, topic={}", topic);   // log trace message, due to potential impact
+        logger.warn(errorCode("MANUAL_OPERATION"), "publish message manually, topic={}", topic);   // log trace message, due to potential impact
 
-        ProducerRecord<byte[], byte[]> record = record(topic, key, body);
+        ProducerRecord<byte[], byte[]> record = record(topic, key, body, actionLog);
         producer.send(record);
 
         return Response.text(Strings.format("message published, topic={}, key={}, message={}", topic, key, new String(body, UTF_8)));
@@ -51,9 +52,10 @@ public class KafkaController {
         accessControl.validate(request.clientIP());
         String topic = request.pathParam("topic");
         String key = request.pathParam("key");
+        ActionLog actionLog = initAction(topic, key);
         byte[] body = request.body().orElseThrow(() -> new Error("body must not be null"));
 
-        logger.warn(Markers.errorCode("MANUAL_OPERATION"), "handle message manually, topic={}", topic);   // log trace message, due to potential impact
+        logger.warn(errorCode("MANUAL_OPERATION"), "handle message manually, topic={}", topic);   // log trace message, due to potential impact
 
         @SuppressWarnings("unchecked")
         MessageProcess<Object> process = (MessageProcess<Object>) listener.processes.get(topic);
@@ -62,21 +64,31 @@ public class KafkaController {
         process.validator.validate(message, false);
         logger.debug("[message] topic={}, key={}, value={}", topic, key, new BytesLogParam(Strings.bytes(JSON.toJSON(message))));    // log converted message
         if (process.handler != null) {
-            logger.debug("handler={}", process.handler.getClass().getCanonicalName());
+            String handler = process.handler.getClass().getCanonicalName();
+            actionLog.context.put("handler", List.of(handler));
+            logger.debug("handler={}", handler);
             process.handler.handle(key, message);
         } else {
-            logger.debug("handler={}", process.bulkHandler.getClass().getCanonicalName());
+            String handler = process.bulkHandler.getClass().getCanonicalName();
+            actionLog.context.put("handler", List.of(handler));
+            logger.debug("handler={}", handler);
             process.bulkHandler.handle(List.of(new Message<>(key, message)));
         }
         return Response.text(Strings.format("message handled, topic={}, key={}, message={}", topic, key, new String(body, UTF_8)));
     }
 
-    ProducerRecord<byte[], byte[]> record(String topic, String key, byte[] body) {
+    private ActionLog initAction(String topic, String key) {
+        ActionLog actionLog = LogManager.CURRENT_ACTION_LOG.get();
+        actionLog.context.put("topic", List.of(topic));
+        actionLog.context.put("key", List.of(key));
+        return actionLog;
+    }
+
+    ProducerRecord<byte[], byte[]> record(String topic, String key, byte[] body, ActionLog actionLog) {
         var record = new ProducerRecord<>(topic, Strings.bytes(key), body);
         Headers headers = record.headers();
         headers.add(MessageHeaders.HEADER_CLIENT, Strings.bytes(KafkaController.class.getSimpleName()));
         headers.add(MessageHeaders.HEADER_TRACE, Strings.bytes(Trace.CASCADE.name()));  // auto trace
-        ActionLog actionLog = LogManager.CURRENT_ACTION_LOG.get();
         headers.add(MessageHeaders.HEADER_CORRELATION_ID, Strings.bytes(actionLog.correlationId()));
         headers.add(MessageHeaders.HEADER_REF_ID, Strings.bytes(actionLog.id));
         return record;

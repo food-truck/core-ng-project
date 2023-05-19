@@ -2,6 +2,7 @@ package core.framework.mongo.impl;
 
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.MongoCommandException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
@@ -32,10 +33,11 @@ public class MongoImpl implements Mongo {
     private final Logger logger = LoggerFactory.getLogger(MongoImpl.class);
     private final ConnectionPoolSettings.Builder connectionPoolSettings = ConnectionPoolSettings.builder()
         .maxConnectionIdleTime(Duration.ofMinutes(30).toMillis(), TimeUnit.MILLISECONDS);
+
     public ConnectionString uri;
-    public int tooManyRowsReturnedThreshold = 2000;
+    public MongoConnectionPoolMetrics metrics;
+
     long timeoutInMs = Duration.ofSeconds(15).toMillis();
-    long slowOperationThresholdInNanos = Duration.ofSeconds(5).toNanos();
     CodecRegistry registry;
     private MongoClient mongoClient;
     private MongoDatabase database;
@@ -58,6 +60,7 @@ public class MongoImpl implements Mongo {
         var watch = new StopWatch();
         try {
             connectionPoolSettings.maxWaitTime(timeoutInMs, TimeUnit.MILLISECONDS); // pool checkout timeout
+            if (metrics != null) connectionPoolSettings.addConnectionPoolListener(metrics);
             var socketSettings = SocketSettings.builder()
                 .connectTimeout((int) timeoutInMs, TimeUnit.MILLISECONDS)
                 .readTimeout((int) timeoutInMs, TimeUnit.MILLISECONDS)
@@ -99,6 +102,22 @@ public class MongoImpl implements Mongo {
     }
 
     @Override
+    public void dropIndex(String collection, Bson keys) {
+        boolean deleted = false;
+        var watch = new StopWatch();
+        try {
+            database.getCollection(collection).dropIndex(keys);
+            deleted = true;
+        } catch (MongoCommandException e) {
+            if (!"IndexNotFound".equals(e.getErrorCodeName())) {    // only ignore index not found error
+                throw e;
+            }
+        } finally {
+            logger.info("dropIndex, collection={}, keys={}, deleted={}, elapsed={}", collection, keys, deleted, watch.elapsed());
+        }
+    }
+
+    @Override
     public void dropCollection(String collection) {
         var watch = new StopWatch();
         try {
@@ -115,6 +134,16 @@ public class MongoImpl implements Mongo {
             return database.runCommand(command);
         } finally {
             logger.info("runCommand, command={}, elapsed={}", command, watch.elapsed());
+        }
+    }
+
+    @Override
+    public Document runAdminCommand(Bson command) {
+        var watch = new StopWatch();
+        try {
+            return mongoClient.getDatabase("admin").runCommand(command);
+        } finally {
+            logger.info("runAdminCommand, command={}, elapsed={}", command, watch.elapsed());
         }
     }
 
@@ -146,10 +175,6 @@ public class MongoImpl implements Mongo {
         } finally {
             logger.info("register mongo view, viewClass={}, elapsed={}", viewClass.getCanonicalName(), watch.elapsed());
         }
-    }
-
-    public void slowOperationThreshold(Duration threshold) {
-        slowOperationThresholdInNanos = threshold.toNanos();
     }
 
     <T> com.mongodb.client.MongoCollection<T> mongoCollection(Class<T> entityClass) {

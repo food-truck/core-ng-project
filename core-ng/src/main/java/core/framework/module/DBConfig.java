@@ -60,6 +60,7 @@ public class DBConfig extends Config {
     public void user(String user) {
         if ("iam/gcloud".equals(user)) {
             database.authProvider("gcloud");
+            context.logManager.maskFields("access_token");  // mask token from IAM http response
         } else {
             database.user = user;
         }
@@ -75,14 +76,6 @@ public class DBConfig extends Config {
 
     public void isolationLevel(IsolationLevel level) {
         database.isolationLevel = level;
-    }
-
-    public void slowOperationThreshold(Duration threshold) {
-        database.slowOperationThresholdInNanos = threshold.toNanos();
-    }
-
-    public void tooManyRowsReturnedThreshold(int threshold) {
-        database.tooManyRowsReturnedThreshold = threshold;
     }
 
     public void longTransactionThreshold(Duration threshold) {

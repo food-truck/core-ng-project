@@ -3,6 +3,7 @@ package core.framework.internal.log;
 import core.framework.log.Markers;
 import core.framework.util.Strings;
 
+import javax.annotation.Nullable;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.text.DecimalFormat;
@@ -32,23 +33,20 @@ public final class ActionLog {
     public final Map<String, List<String>> context;
     public final Map<String, List<String>> info;
     public final Map<String, Double> stats;
+    public final WarningContext warningContext;
+
     final Map<String, PerformanceStat> performanceStats;
     private final List<LogEvent> events;
     private final long startTime;
     private final long startCPUTime;
-
     public LogLevel result = LogLevel.INFO;
     public Trace trace = Trace.NONE;        // whether flush trace log for all subsequent actions
     public String action = "unassigned";
     public List<String> correlationIds;     // with bulk message handler, there will be multiple correlationIds handled by one batch
     public List<String> clients;
     public List<String> refIds;
-
-    long maxProcessTimeInNano;
-    String errorMessage;
+    public String errorMessage;
     long elapsed;
-
-    private InternalActionContext internalContext;
     private String errorCode;
 
     public ActionLog(String message, String id) {
@@ -65,6 +63,7 @@ public final class ActionLog {
         info = new HashMap<>();
         stats = new HashMap<>();
         performanceStats = new HashMap<>();
+        warningContext = new WarningContext();
 
         add(event(message));
         add(event("id={}", this.id));
@@ -83,21 +82,18 @@ public final class ActionLog {
         }
     }
 
-    long complete() {
+    void end(String message) {
+        for (PerformanceStat stat : performanceStats.values()) {
+            stat.checkTotalIO();
+        }
+
         double cpuTime = THREAD.getCurrentThreadCpuTime() - startCPUTime;
         stats.put("cpu_time", cpuTime);
         elapsed = elapsed();
         add(event("elapsed={}", elapsed));
-        return elapsed;
-    }
+        warningContext.checkMaxProcessTime(elapsed);
 
-    void end(String message) {
         add(event(message));
-    }
-
-    public void maxProcessTime(long maxProcessTimeInNano) {
-        this.maxProcessTimeInNano = maxProcessTimeInNano;
-        add(event("maxProcessTime={}", maxProcessTimeInNano));
     }
 
     public long elapsed() {
@@ -171,13 +167,15 @@ public final class ActionLog {
         add(event("[stat] {}={}", key, format.format(value)));
     }
 
+    public void initializeWarnings(PerformanceWarning[] warnings) {
+        for (PerformanceWarning warning : warnings) {
+            performanceStats.put(warning.operation, new PerformanceStat(warning));
+        }
+    }
+
     public int track(String operation, long elapsed, int readEntries, int writeEntries) {
-        PerformanceStat stat = performanceStats.computeIfAbsent(operation, key -> new PerformanceStat());
-        stat.count += 1;
-        stat.totalElapsed += elapsed;
-        stat.readEntries += readEntries;
-        stat.writeEntries += writeEntries;
-        // not to add event to keep trace log concise
+        PerformanceStat stat = performanceStats.computeIfAbsent(operation, key -> new PerformanceStat(WarningContext.defaultWarning(key)));
+        stat.track(elapsed, readEntries, writeEntries);
         return stat.count;
     }
 
@@ -197,7 +195,7 @@ public final class ActionLog {
     }
 
     public long remainingProcessTimeInNano() {
-        long remainingTime = maxProcessTimeInNano - elapsed();
+        long remainingTime = warningContext.maxProcessTimeInNano - elapsed();
         if (remainingTime < 0) return 0;
         return remainingTime;
     }
@@ -210,8 +208,13 @@ public final class ActionLog {
         return builder.toString();
     }
 
-    public InternalActionContext internalContext() {
-        if (internalContext == null) internalContext = new InternalActionContext();
-        return internalContext;
+    @Nullable
+    public PerformanceWarning[] warnings() {
+        List<PerformanceWarning> configs = new ArrayList<>(performanceStats.size());
+        for (PerformanceStat stat : performanceStats.values()) {
+            if (stat.warning != null) configs.add(stat.warning);
+        }
+        if (configs.isEmpty()) return null;
+        return configs.toArray(new PerformanceWarning[0]);
     }
 }
