@@ -1,6 +1,7 @@
 package core;
 
 import core.framework.http.HTTPClient;
+import core.framework.internal.log.appender.ConsoleAppender;
 import core.framework.json.Bean;
 import core.framework.kafka.MessagePublisher;
 import core.framework.log.message.ActionLogMessage;
@@ -11,7 +12,7 @@ import core.framework.module.App;
 import core.framework.module.KafkaConfig;
 import core.framework.search.module.SearchConfig;
 import core.log.LogForwardConfig;
-import core.log.LogGroupConfig;
+import core.log.LogIndexRouter;
 import core.log.domain.ActionDocument;
 import core.log.domain.EventDocument;
 import core.log.domain.StatDocument;
@@ -20,20 +21,17 @@ import core.log.job.CleanupOldIndexJob;
 import core.log.kafka.ActionLogMessageHandler;
 import core.log.kafka.EventMessageHandler;
 import core.log.kafka.StatMessageHandler;
-import core.log.service.ActionLogForwarder;
-import core.log.service.ActionService;
-import core.log.service.ConsoleAppenderExtension;
-import core.log.service.EventForwarder;
-import core.log.service.EventService;
-import core.log.service.IndexOption;
+import core.log.service.KafkaExtensionAppender;
 import core.log.service.IndexService;
-import core.log.service.JobConfig;
 import core.log.service.KibanaService;
-import core.log.service.StatService;
+import core.log.service.IndexOption;
+import core.log.service.AppGroupMappingLogIndexRouter;
+import core.log.service.ActionLogForwarder;
+import core.log.service.EventForwarder;
+import core.log.service.JobConfig;
 
 import java.time.Duration;
 import java.time.LocalTime;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -50,12 +48,6 @@ public class LogProcessorApp extends App {
 
         configureIndexOption();
         IndexService indexService = bind(IndexService.class);
-        ActionService actionService = bind(ActionService.class);
-        actionService.applicationGroupMapping(logGroupConfig());
-        bind(StatService.class);
-        bind(EventService.class);
-
-        configureLogAppender();
         onStartup(indexService::createIndexTemplates);
 
         configureKibanaService();
@@ -63,6 +55,7 @@ public class LogProcessorApp extends App {
         Forwarders forwarders = configureLogForwarders();
         configureKafka(forwarders);
         configureJob();
+        configureLogAppender();
 
         load(new DiagramModule());
     }
@@ -83,7 +76,8 @@ public class LogProcessorApp extends App {
             if ("console".equals(appender)) {
                 log().appendToConsole();
             } else if ("consoleExtension".equals(appender)) {
-                log().appender(bind(ConsoleAppenderExtension.class));
+                kafka().publish(LogTopics.TOPIC_ACTION_LOG, ActionLogMessage.class);
+                log().appender(bind(KafkaExtensionAppender.class, new KafkaExtensionAppender(new ConsoleAppender())));
             }
         });
     }
@@ -102,7 +96,10 @@ public class LogProcessorApp extends App {
         kafka().minPoll(1024 * 1024, Duration.ofMillis(500));           // try to get at least 1M message
         kafka().maxPoll(2000, 3 * 1024 * 1024);     // get 3M message at max
 
-        kafka().subscribe(LogTopics.TOPIC_ACTION_LOG, ActionLogMessage.class, bind(new ActionLogMessageHandler(forwarders.action)));
+        var actionLogMessageHandler = new ActionLogMessageHandler(forwarders.action, property("app.log.group.mapping")
+            .<LogIndexRouter>map(config -> new AppGroupMappingLogIndexRouter("action", config))
+            .orElseGet(() -> new LogIndexRouter.FixedLogIndexRouter("action")), LogIndexRouter.DEFAULT_ROUTER);
+        kafka().subscribe(LogTopics.TOPIC_ACTION_LOG, ActionLogMessage.class, bind(actionLogMessageHandler));
         kafka().subscribe(LogTopics.TOPIC_STAT, StatMessage.class, bind(StatMessageHandler.class));
         kafka().subscribe(LogTopics.TOPIC_EVENT, EventMessage.class, bind(new EventMessageHandler(forwarders.event)));
     }
@@ -113,7 +110,6 @@ public class LogProcessorApp extends App {
         search.host(requiredProperty("sys.elasticsearch.host"));
         property("sys.elasticsearch.apiKey").ifPresent(search::auth);
         search.timeout(Duration.ofSeconds(20)); // use longer timeout/slowES threshold as log indexing can be slower with large batches
-        search.slowOperationThreshold(Duration.ofSeconds(10));
         search.type(ActionDocument.class);
         search.type(TraceDocument.class);
         search.type(StatDocument.class);
@@ -150,17 +146,6 @@ public class LogProcessorApp extends App {
             }
         }
         return forwarders;
-    }
-
-    private LogGroupConfig logGroupConfig() {
-        String logGroupConfigValue = property("app.log.group.mapping").orElse(null);
-        if (logGroupConfigValue != null) {
-            Bean.register(LogGroupConfig.class);
-            return Bean.fromJSON(LogGroupConfig.class, logGroupConfigValue);
-        }
-        LogGroupConfig logGroupConfig = new LogGroupConfig();
-        logGroupConfig.groups = Map.of();
-        return logGroupConfig;
     }
 
     static class Forwarders {

@@ -7,6 +7,7 @@ import core.framework.log.message.ActionLogMessage;
 import core.framework.search.BulkIndexRequest;
 import core.framework.search.ElasticSearchType;
 import core.framework.util.Maps;
+import core.log.LogIndexRouter;
 import core.log.domain.ActionDocument;
 import core.log.domain.TraceDocument;
 import core.log.service.ActionLogForwarder;
@@ -16,6 +17,8 @@ import javax.annotation.Nullable;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * @author neo
@@ -24,6 +27,10 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     @Nullable
     final ActionLogForwarder forwarder;
 
+    private final LogIndexRouter actionLogIndexRouter;
+
+    private final LogIndexRouter traceLogIndexRouter;
+
     @Inject
     IndexService indexService;
     @Inject
@@ -31,8 +38,10 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     @Inject
     ElasticSearchType<TraceDocument> traceType;
 
-    public ActionLogMessageHandler(@Nullable ActionLogForwarder forwarder) {
+    public ActionLogMessageHandler(@Nullable ActionLogForwarder forwarder, LogIndexRouter actionLogIndexRouter, LogIndexRouter traceLogIndexRouter) {
         this.forwarder = forwarder;
+        this.actionLogIndexRouter = actionLogIndexRouter;
+        this.traceLogIndexRouter = traceLogIndexRouter;
     }
 
     @Override
@@ -59,15 +68,19 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     }
 
     private void indexActions(Map<String, ActionDocument> actions, LocalDate now) {
-        BulkIndexRequest<ActionDocument> request = new BulkIndexRequest<>();
-        request.index = indexService.indexName("action", now);
-        request.sources = actions;
-        actionType.bulkIndex(request);
+        actions.entrySet().stream()
+                .collect(Collectors.groupingBy(entry -> Objects.requireNonNullElse(entry.getValue().app, "")))
+                .forEach((app, appActions) -> {
+                    BulkIndexRequest<ActionDocument> request = new BulkIndexRequest<>();
+                    request.index = indexService.indexName(actionLogIndexRouter.route(app), now);
+                    request.sources = appActions.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    actionType.bulkIndex(request);
+                });
     }
 
     private void indexTraces(Map<String, TraceDocument> traces, LocalDate now) {
         BulkIndexRequest<TraceDocument> request = new BulkIndexRequest<>();
-        request.index = indexService.indexName("trace", now);
+        request.index = indexService.indexName(traceLogIndexRouter.route("trace"), now);
         request.sources = traces;
         traceType.bulkIndex(request);
     }

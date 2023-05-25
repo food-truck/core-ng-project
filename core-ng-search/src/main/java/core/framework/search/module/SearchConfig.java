@@ -52,10 +52,6 @@ public class SearchConfig extends Config {
         search.apiKey = apiKey;
     }
 
-    public void slowOperationThreshold(Duration threshold) {
-        search.slowOperationThreshold = threshold;
-    }
-
     // refer to https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html#index-max-result-window
     // this config should match index.max_result_window
     public void maxResultWindow(int maxResultWindow) {

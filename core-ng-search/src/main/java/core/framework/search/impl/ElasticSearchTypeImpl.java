@@ -8,6 +8,7 @@ import co.elastic.clients.elasticsearch._types.Result;
 import co.elastic.clients.elasticsearch._types.ShardFailure;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.DeleteByQueryResponse;
+import co.elastic.clients.elasticsearch.core.DeleteResponse;
 import co.elastic.clients.elasticsearch.core.GetResponse;
 import co.elastic.clients.elasticsearch.core.UpdateResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
@@ -67,7 +68,6 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
 
     private final ElasticSearchImpl elasticSearch;
     private final String index;
-    private final long slowOperationThresholdInNanos;
     private final int maxResultWindow;
     private final Validator<T> validator;
     private final Class<T> documentClass;
@@ -75,12 +75,11 @@ public final class ElasticSearchTypeImpl<T> implements ElasticSearchType<T> {
 
     ElasticSearchTypeImpl(ElasticSearchImpl elasticSearch, Class<T> documentClass) {
         this.elasticSearch = elasticSearch;
-        this.slowOperationThresholdInNanos = elasticSearch.slowOperationThreshold.toNanos();
         this.maxResultWindow = elasticSearch.maxResultWindow;
         this.index = documentClass.getDeclaredAnnotation(Index.class).name();
         this.documentClass = documentClass;
-        validator = Validator.of(documentClass);
-        this.extension = new ElasticSearchTypeImplExtension<>(this.index, this.slowOperationThresholdInNanos, validator, elasticSearch, documentClass);
+        this.validator = Validator.of(documentClass);
+        this.extension = new ElasticSearchTypeImplExtension<>(this.index, validator, elasticSearch, documentClass);
     }
 
     @Override

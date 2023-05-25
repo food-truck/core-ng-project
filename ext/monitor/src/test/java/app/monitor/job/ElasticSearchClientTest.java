@@ -17,7 +17,7 @@ class ElasticSearchClientTest {
 
     @BeforeEach
     void createElasticSearchClient() {
-        client = new ElasticSearchClient();
+        client = new ElasticSearchClient("localhost", null);
     }
 
     @Test

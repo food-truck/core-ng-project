@@ -71,7 +71,7 @@ project('core-ng-json') {
 project('core-ng-common') {
     apply from: file("${rootDir}/gradle/lib.gradle")
     dependencies {
-        api 'org.slf4j:slf4j-api:1.8.0-beta4'
+        api 'org.slf4j:slf4j-api:2.0.6'
         testImplementation "org.junit.jupiter:junit-jupiter-api:${junitVersion}"
         testImplementation "org.assertj:assertj-core:${assertjVersion}"
         testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitVersion}"
@@ -112,11 +112,11 @@ project('core-ng-search-test') {
         implementation project(':core-ng-test')
         implementation project(':core-ng-search')
         implementation "org.elasticsearch:elasticsearch:${elasticVersion}"
-        implementation "com.wonder.elasticsearch.module:transport-netty4:${elasticVersion}.hotfix"
-        implementation "com.wonder.elasticsearch.module:mapper-extras:${elasticVersion}.hotfix"    // used by elasticsearch scaled_float
-        implementation "com.wonder.elasticsearch.module:lang-painless:${elasticVersion}.hotfix"
-        implementation "com.wonder.elasticsearch.module:analysis-common:${elasticVersion}.hotfix"  // used by elasticsearch stemmer
-        implementation "com.wonder.elasticsearch.module:reindex:${elasticVersion}.hotfix"          // used by elasticsearch deleteByQuery
+        implementation "com.wonder.elasticsearch.module:transport-netty4:${elasticVersion}-SNAPSHOT"
+        implementation "com.wonder.elasticsearch.module:mapper-extras:${elasticVersion}-SNAPSHOT"    // used by elasticsearch scaled_float
+        implementation "com.wonder.elasticsearch.module:lang-painless:${elasticVersion}-SNAPSHOT"
+        implementation "com.wonder.elasticsearch.module:analysis-common:${elasticVersion}-SNAPSHOT"  // used by elasticsearch stemmer
+        implementation "com.wonder.elasticsearch.module:reindex:${elasticVersion}-SNAPSHOT"          // used by elasticsearch deleteByQuery
     }
 }
 
