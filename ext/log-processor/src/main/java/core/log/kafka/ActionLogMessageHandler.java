@@ -100,6 +100,7 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
         document.errorMessage = message.errorMessage;
         document.elapsed = message.elapsed;
         document.context = message.context;
+        document.info = message.info;
         document.stats = message.stats;
         document.performanceStats = message.performanceStats;
         return document;
