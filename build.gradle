@@ -9,7 +9,7 @@ subprojects {
 
 def elasticVersion = '8.7.0'
 def kafkaVersion = '3.4.0'
-def jacksonVersion = '2.15.0'
+def jacksonVersion = '2.15.1'
 def junitVersion = '5.9.3'
 def mockitoVersion = '5.3.1'
 def assertjVersion = '3.24.2'
@@ -113,10 +113,10 @@ project('core-ng-search-test') {
         implementation project(':core-ng-search')
         implementation "org.elasticsearch:elasticsearch:${elasticVersion}"
         implementation "com.wonder.elasticsearch.module:transport-netty4:${elasticVersion}-SNAPSHOT"
-        implementation "com.wonder.elasticsearch.module:mapper-extras:${elasticVersion}-SNAPSHOT"    // used by elasticsearch scaled_float
+        implementation "com.wonder.elasticsearch.module:mapper-extras:${elasticVersion}-SNAPSHOT"
         implementation "com.wonder.elasticsearch.module:lang-painless:${elasticVersion}-SNAPSHOT"
-        implementation "com.wonder.elasticsearch.module:analysis-common:${elasticVersion}-SNAPSHOT"  // used by elasticsearch stemmer
-        implementation "com.wonder.elasticsearch.module:reindex:${elasticVersion}-SNAPSHOT"          // used by elasticsearch deleteByQuery
+        implementation "com.wonder.elasticsearch.module:analysis-common:${elasticVersion}-SNAPSHOT"
+        implementation "com.wonder.elasticsearch.module:reindex:${elasticVersion}-SNAPSHOT"
     }
 }
 
