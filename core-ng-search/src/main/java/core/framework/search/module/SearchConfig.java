@@ -50,6 +50,7 @@ public class SearchConfig extends Config {
     public void auth(String apiKey) {
         if (apiKey.isEmpty()) throw new Error("search auth is configured but apiKey is empty");
         search.apiKey = apiKey;
+        context.probe.defaultHeaders.put("Authorization", "ApiKey " + apiKey);
     }
 
     // refer to https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html#index-max-result-window

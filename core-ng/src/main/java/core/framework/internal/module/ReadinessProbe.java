@@ -11,7 +11,9 @@ import org.slf4j.LoggerFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static core.framework.log.Markers.errorCode;
 
@@ -26,6 +28,8 @@ public final class ReadinessProbe {
     public List<String> hostURIs = new ArrayList<>();
     public List<String> urls = new ArrayList<>();
 
+    public Map<String, String> defaultHeaders = new HashMap<>();
+
     public void check() throws Exception {
         logger.info("check readiness");
         var watch = new StopWatch();
@@ -39,6 +43,7 @@ public final class ReadinessProbe {
             resolveHost(hostname, watch);
         }
         hostURIs = null;    // release memory
+        this.defaultHeaders = null;
     }
 
     private void checkHTTP(StopWatch watch) throws InterruptedException {
@@ -53,6 +58,9 @@ public final class ReadinessProbe {
 
     private void sendHTTPRequest(String url, HTTPClient client, StopWatch watch) throws InterruptedException {
         var request = new HTTPRequest(HTTPMethod.GET, url);
+        if (defaultHeaders != null && !defaultHeaders.isEmpty()) {
+            request.headers.putAll(defaultHeaders);
+        }
         while (true) {
             try {
                 HTTPResponse response = client.execute(request);
@@ -72,7 +80,8 @@ public final class ReadinessProbe {
                 InetAddress.getByName(hostname);
                 return;
             } catch (UnknownHostException e) {
-                if (watch.elapsed() >= MAX_WAIT_TIME_IN_NANO) throw new Error("readiness check failed, host=" + hostname, e);
+                if (watch.elapsed() >= MAX_WAIT_TIME_IN_NANO)
+                    throw new Error("readiness check failed, host=" + hostname, e);
                 logger.warn(errorCode("NOT_READY"), "dns probe failed, retry soon, host={}", hostname, e);
                 Thread.sleep(5000);
             }

@@ -112,11 +112,11 @@ project('core-ng-search-test') {
         implementation project(':core-ng-test')
         implementation project(':core-ng-search')
         implementation "org.elasticsearch:elasticsearch:${elasticVersion}"
-        implementation "com.wonder.elasticsearch.module:transport-netty4:${elasticVersion}-SNAPSHOT"
-        implementation "com.wonder.elasticsearch.module:mapper-extras:${elasticVersion}-SNAPSHOT"
-        implementation "com.wonder.elasticsearch.module:lang-painless:${elasticVersion}-SNAPSHOT"
-        implementation "com.wonder.elasticsearch.module:analysis-common:${elasticVersion}-SNAPSHOT"
-        implementation "com.wonder.elasticsearch.module:reindex:${elasticVersion}-SNAPSHOT"
+        implementation "com.wonder.elasticsearch.module:transport-netty4:${elasticVersion}"
+        implementation "com.wonder.elasticsearch.module:mapper-extras:${elasticVersion}"
+        implementation "com.wonder.elasticsearch.module:lang-painless:${elasticVersion}"
+        implementation "com.wonder.elasticsearch.module:analysis-common:${elasticVersion}"
+        implementation "com.wonder.elasticsearch.module:reindex:${elasticVersion}"
     }
 }
 
