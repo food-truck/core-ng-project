@@ -10,7 +10,7 @@ subprojects {
             name 'maven-local'
             credentials {
                 username 'foodtruckinc'
-                password System.getenv("AZURE_PACKAGES_ACCESSTOKEN") != null ? System.getenv("AZURE_PACKAGES_ACCESSTOKEN") : mavenAccessToken
+                password System.getenv("SYSTEM_ACCESSTOKEN") != null ? System.getenv("SYSTEM_ACCESSTOKEN") : mavenAccessToken
             }
         }
     }
