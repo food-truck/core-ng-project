@@ -1,6 +1,8 @@
 include 'core-ng-api',
         'core-ng',
         'core-ng-test',
+        'core-ng-grpc',
+        'core-ng-grpc-test',
         'core-ng-search',
         'core-ng-search-test',
         'core-ng-mongo',
