@@ -1,5 +1,7 @@
 package core.framework.internal.web.session;
 
+import core.framework.internal.module.ModuleContext;
+import core.framework.plugin.PluginInitializable;
 import core.framework.plugin.WebSessionStorePlugin;
 import core.framework.util.Lists;
 import core.framework.util.Strings;
@@ -13,14 +15,21 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * @author rickeyhong 
+ * @author rickeyhong
  */
-public final class PluginSessionStore implements SessionStore {
+public final class PluginSessionStore implements SessionStore, PluginInitializable {
     private static final Logger LOGGER = LoggerFactory.getLogger(PluginSessionStore.class);
-    private final List<WebSessionStorePlugin> plugins = Lists.newArrayList();
+    private List<WebSessionStorePlugin> plugins;
 
-    public void initialize(List<WebSessionStorePlugin> plugins) {
-        this.plugins.addAll(plugins);
+    @Override
+    public boolean isAvailable() {
+        return plugins != null;
+    }
+
+    @Override
+    public void initialize(ModuleContext context) {
+        this.plugins = Lists.newArrayList();
+        this.plugins.addAll(context.pluginManager.getGroupPlugins(WebSessionStorePlugin.class));
     }
 
     @Override
@@ -81,8 +90,10 @@ public final class PluginSessionStore implements SessionStore {
     }
 
     private void check() {
-        if (plugins.isEmpty()) {
-            throw new IllegalStateException("Not Found Plugin.");
+        if (!isAvailable()) {
+            throw new IllegalStateException("Not Availiable!");
+        } else if (plugins.isEmpty()) {
+            throw new IllegalStateException("Not Found Plugin!");
         }
     }
 }

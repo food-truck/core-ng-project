@@ -7,11 +7,11 @@ import core.framework.util.Strings;
 import java.util.*;
 
 /**
- * @author rickeyhong 
+ * @author rickeyhong
  */
 @SuppressWarnings("unchecked")
 public final class DefaultPluginManager implements PluginManager {
-    private final Map<Class<?>, Map<String, Plugin>> pluginMap = Maps.newConcurrentHashMap();
+    private Map<Class<?>, Map<String, Plugin>> pluginMap = Maps.newConcurrentHashMap();
 
     @Override
     public <T extends Plugin> void register(Class<T> group, T plugin) {
@@ -39,5 +39,10 @@ public final class DefaultPluginManager implements PluginManager {
                 .sorted(Comparator.comparingInt(Plugin::order))
                 .toList())
             .orElse(Collections.emptyList());
+    }
+
+    @Override
+    public void cleanup() {
+        pluginMap = null;
     }
 }

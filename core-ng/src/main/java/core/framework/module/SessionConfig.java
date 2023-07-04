@@ -8,7 +8,6 @@ import core.framework.internal.resource.PoolMetrics;
 import core.framework.internal.web.session.LocalSessionStore;
 import core.framework.internal.web.session.PluginSessionStore;
 import core.framework.internal.web.session.RedisSessionStore;
-import core.framework.plugin.WebSessionStorePlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,7 +65,7 @@ public class SessionConfig extends Config {
 
         var pluginSessionStore = new PluginSessionStore();
         context.backgroundTask().scheduleWithFixedDelay(pluginSessionStore::cleanup, Duration.ofMinutes(5));
-        context.startupHook.initialize.add(() -> pluginSessionStore.initialize(context.pluginManager.getGroupPlugins(WebSessionStorePlugin.class)));
+        context.startupHook.initialize.add(() -> pluginSessionStore.initialize(context));
         context.httpServer.siteManager.sessionManager.store(pluginSessionStore);
     }
 }
