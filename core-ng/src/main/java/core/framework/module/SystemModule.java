@@ -37,6 +37,8 @@ public final class SystemModule extends Module {
         property("sys.session.host").ifPresent(host -> {
             if ("local".equals(host)) {
                 site().session().local();
+            } else if ("plugin".equals(host)) {
+                site().session().plugin();                
             } else {
                 site().session().redis(host);
             }

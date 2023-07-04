@@ -4,6 +4,8 @@ import core.framework.http.HTTPMethod;
 import core.framework.internal.bean.BeanClassValidator;
 import core.framework.internal.inject.BeanFactory;
 import core.framework.internal.log.LogManager;
+import core.framework.internal.plugin.DefaultPluginManager;
+import core.framework.internal.plugin.PluginManager;
 import core.framework.internal.stat.StatCollector;
 import core.framework.internal.web.HTTPServer;
 import core.framework.internal.web.HTTPServerConfig;
@@ -45,6 +47,7 @@ public class ModuleContext {    // after core.framework.module.App.start(), enti
     public final HTTPServerConfig httpServerConfig = new HTTPServerConfig();
     public final APIController apiController = new APIController();
     public final BeanClassValidator beanClassValidator = new BeanClassValidator();
+    public final PluginManager pluginManager = new DefaultPluginManager();
     protected final Map<String, Config> configs = Maps.newHashMap();
     final PropertyValidator propertyValidator = new PropertyValidator();
     private BackgroundTaskExecutor backgroundTask;

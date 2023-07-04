@@ -19,7 +19,7 @@ import static core.framework.log.Markers.errorCode;
 /**
  * @author neo
  */
-public class RedisSessionStore implements SessionStore {
+public final class RedisSessionStore implements SessionStore {
     private final Logger logger = LoggerFactory.getLogger(RedisSessionStore.class);
 
     private final Redis redis;

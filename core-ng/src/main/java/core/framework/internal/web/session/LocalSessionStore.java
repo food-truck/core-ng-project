@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * @author neo
  */
-public class LocalSessionStore implements SessionStore {
+public final class LocalSessionStore implements SessionStore {
     final Map<String, SessionValue> values = Maps.newConcurrentHashMap();
 
     private final Logger logger = LoggerFactory.getLogger(LocalSessionStore.class);

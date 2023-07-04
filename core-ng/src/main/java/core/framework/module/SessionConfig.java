@@ -6,7 +6,9 @@ import core.framework.internal.module.ShutdownHook;
 import core.framework.internal.redis.RedisImpl;
 import core.framework.internal.resource.PoolMetrics;
 import core.framework.internal.web.session.LocalSessionStore;
+import core.framework.internal.web.session.PluginSessionStore;
 import core.framework.internal.web.session.RedisSessionStore;
+import core.framework.plugin.WebSessionStorePlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,5 +59,14 @@ public class SessionConfig extends Config {
         context.probe.hostURIs.add(host);
         context.shutdownHook.add(ShutdownHook.STAGE_6, timeout -> redis.close());
         context.httpServer.siteManager.sessionManager.store(new RedisSessionStore(redis));
+    }
+
+    public void plugin() {
+        logger.info("create plugin session store");
+
+        var pluginSessionStore = new PluginSessionStore();
+        context.backgroundTask().scheduleWithFixedDelay(pluginSessionStore::cleanup, Duration.ofMinutes(5));
+        context.startupHook.initialize.add(() -> pluginSessionStore.initialize(context.pluginManager.getGroupPlugins(WebSessionStorePlugin.class)));
+        context.httpServer.siteManager.sessionManager.store(pluginSessionStore);
     }
 }
