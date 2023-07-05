@@ -1,7 +1,5 @@
 package core.framework.internal.web.session;
 
-import core.framework.plugin.WebSessionStorePlugin;
-
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;

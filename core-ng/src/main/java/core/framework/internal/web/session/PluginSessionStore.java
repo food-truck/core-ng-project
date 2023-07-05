@@ -4,7 +4,6 @@ import core.framework.internal.module.ModuleContext;
 import core.framework.plugin.PluginInitializable;
 import core.framework.plugin.WebSessionStorePlugin;
 import core.framework.util.Lists;
-import core.framework.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,13 +41,15 @@ public final class PluginSessionStore implements SessionStore, PluginInitializab
             try {
                 if (session == null) {
                     session = plugin.get(sessionId, domain);
+                    LOGGER.info("get session successful! plugin: {}", plugin.pluginName());
                 }
                 plugin.refresh(sessionId, domain, timeout);
+                LOGGER.info("refresh session, plugin: {}", plugin.pluginName());
             } catch (Exception e) {
                 if (!iterator.hasNext()) {
                     throw e;
                 }
-                LOGGER.warn(Strings.format("getAndRefresh failure! plugin name: {}", plugin.pluginName()), e);
+                LOGGER.warn("getAndRefresh failure! plugin: " + plugin.pluginName(), e);
             }
         }
         return session;
@@ -80,11 +81,12 @@ public final class PluginSessionStore implements SessionStore, PluginInitializab
             var plugin = iterator.next();
             try {
                 consumer.accept(plugin);
+                LOGGER.debug("each run {}, plugin: {}", method, plugin.pluginName());
             } catch (Exception e) {
                 if (!iterator.hasNext()) {
                     throw e;
                 }
-                LOGGER.warn(Strings.format("{} failure! plugin name: {}", method, plugin.pluginName()), e);
+                LOGGER.warn(method + " failure! plugin: " + plugin.pluginName(), e);
             }
         }
     }

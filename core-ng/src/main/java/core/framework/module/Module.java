@@ -130,6 +130,10 @@ public abstract class Module {
         return context.config(KafkaConfig.class, name);
     }
 
+    public PluginConfig plugin() {
+        return context.config(PluginConfig.class, null);
+    }
+
     public <T extends Config> T config(Class<T> configClass) {
         return config(configClass, null);
     }

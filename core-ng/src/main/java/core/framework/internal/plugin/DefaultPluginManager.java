@@ -4,12 +4,16 @@ import core.framework.plugin.Plugin;
 import core.framework.util.Maps;
 import core.framework.util.Strings;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Comparator;
+import java.util.Collections;
+
 
 /**
  * @author rickeyhong
  */
-@SuppressWarnings("unchecked")
 public final class DefaultPluginManager implements PluginManager {
     private Map<Class<?>, Map<String, Plugin>> pluginMap = Maps.newConcurrentHashMap();
 
@@ -23,19 +27,19 @@ public final class DefaultPluginManager implements PluginManager {
 
     @Override
     public <T extends Plugin> T remove(Class<T> group, String pluginName) {
-        return Optional.ofNullable(pluginMap.get(group)).map(plugins -> (T) plugins.remove(pluginName)).orElse(null);
+        return Optional.ofNullable(pluginMap.get(group)).map(plugins -> group.cast(plugins.remove(pluginName))).orElse(null);
     }
 
     @Override
     public <T extends Plugin> T getPlugin(Class<T> group, String pluginName) {
-        return Optional.ofNullable(pluginMap.get(group)).map(plugins -> (T) plugins.get(pluginName)).orElse(null);
+        return Optional.ofNullable(pluginMap.get(group)).map(plugins -> group.cast(plugins.get(pluginName))).orElse(null);
     }
 
     @Override
     public <T extends Plugin> List<T> getGroupPlugins(Class<T> group) {
         return Optional.ofNullable(pluginMap.get(group))
             .map(plugins -> plugins.values().stream()
-                .map(plugin -> (T) plugin)
+                .map(group::cast)
                 .sorted(Comparator.comparingInt(Plugin::order))
                 .toList())
             .orElse(Collections.emptyList());

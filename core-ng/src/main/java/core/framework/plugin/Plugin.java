@@ -5,7 +5,7 @@ package core.framework.plugin;
  */
 public sealed interface Plugin permits WebSessionStorePlugin {
     default String pluginName() {
-        return getClass().getSimpleName();
+        return getClass().getCanonicalName();
     }
 
     default int order() {
