@@ -20,55 +20,55 @@ import java.util.Set;
 public class PluginConfig extends Config {
     private static final Logger LOGGER = LoggerFactory.getLogger(PluginConfig.class);
     private ModuleContext context;
-    private Set<Class<? extends Plugin>> usedGroup = new HashSet<>();
+    private Set<Class<? extends Plugin>> usedPlugins = new HashSet<>();
 
     @Override
     protected void initialize(ModuleContext context, @Nullable String name) {
         this.context = context;
         var pluginProperties = new Properties();
         pluginProperties.load("plugin.properties");
-        pluginProperties.keys().forEach(group -> plugins(group, pluginProperties.get(group).orElseThrow()));
+        pluginProperties.keys().forEach(plugin -> plugins(plugin, pluginProperties.get(plugin).orElseThrow()));
 
-        context.startupHook.initialize.add(0, () -> usedGroup.forEach(group -> context.pluginManager.getGroupPlugins(group).forEach(plugin -> {
-            context.beanFactory.inject(plugin);
-            if (plugin instanceof PluginInitializable pluginInitializable) {
+        context.startupHook.initialize.add(0, () -> usedPlugins.forEach(plugin -> context.pluginManager.getPlugins(plugin).forEach(pluginImpl -> {
+            context.beanFactory.inject(pluginImpl);
+            if (pluginImpl instanceof PluginInitializable pluginInitializable) {
                 pluginInitializable.initialize(context);
             }
         })));
         context.startupHook.start.add(() -> {
             context.pluginManager.cleanup();
-            usedGroup = null;
+            usedPlugins = null;
         });
     }
 
-    public <T extends Plugin> void plugin(Class<T> group, T plugin) {
-        context.pluginManager.register(group, plugin);
-        this.usedGroup.add(group);
-        LOGGER.info("load plugin, group: {}, plugin: {}", group, plugin.pluginName());
+    public <T extends Plugin> void plugin(Class<T> plugin, T pluginImpl) {
+        context.pluginManager.register(plugin, pluginImpl);
+        this.usedPlugins.add(plugin);
+        LOGGER.info("load plugin, plugin: `{}`, pluginImpl: `{}`", plugin, pluginImpl.pluginName());
     }
 
     @SuppressWarnings("unchecked")
-    private void plugins(String groupClassName, String plugins) {
-        LOGGER.info("plugins group: {}, plugins: {}", groupClassName, plugins);
+    private void plugins(String pluginClassName, String pluginImplClasses) {
+        LOGGER.info("load plugins, plugin: `{}`, pluginImplClasses: `{}`", pluginClassName, pluginImplClasses);
         var classLoader = Thread.currentThread().getContextClassLoader();
-        Class<?> group;
-        var pluginList = Lists.newArrayList();
+        Class<?> plugin;
+        var pluginImpls = Lists.newArrayList();
         try {
-            group = classLoader.loadClass(groupClassName);
-            for (var plugin : plugins.split(",")) {
-                pluginList.add(classLoader.loadClass(plugin.trim()).getConstructor().newInstance());
+            plugin = classLoader.loadClass(pluginClassName);
+            for (var pluginImplClass : pluginImplClasses.split(",")) {
+                pluginImpls.add(classLoader.loadClass(pluginImplClass.trim()).getConstructor().newInstance());
             }
         } catch (ReflectiveOperationException e) {
-            throw new Error(Strings.format("plugins failure! groupClassName: {}, plugins: {}", groupClassName, plugins), e);
+            throw new Error(Strings.format("Load plugins failure! pluginClassName: `{}`, pluginImplClasses: `{}`", pluginClassName, pluginImplClasses), e);
         }
-        if (!Plugin.class.isAssignableFrom(group)) {
+        if (!Plugin.class.isAssignableFrom(plugin)) {
             throw new Error("Plugin must be extends from " + Plugin.class.getCanonicalName());
         }
-        for (var plugin : pluginList) {
-            if (!group.isAssignableFrom(plugin.getClass())) {
-                throw new Error(Strings.format("Plugin `{}` must be implemention from {}", plugin.getClass().getCanonicalName(), group.getCanonicalName()));
+        for (var pluginImpl : pluginImpls) {
+            if (!plugin.isAssignableFrom(pluginImpl.getClass())) {
+                throw new Error(Strings.format("Plugin `{}` must be implemention from `{}`", pluginImpl.getClass().getCanonicalName(), plugin.getCanonicalName()));
             }
-            plugin((Class<Plugin>) group, (Plugin) plugin);
+            plugin((Class<Plugin>) plugin, (Plugin) pluginImpl);
         }
     }
 }

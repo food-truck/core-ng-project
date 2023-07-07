@@ -23,7 +23,7 @@ class DefaultPluginManagerTest {
     @Test
     void register() {
         pluginManager.register(WebSessionStorePlugin.class, new Test1WebSessionStorePlugin());
-        assertThat(pluginManager.getGroupPlugins(WebSessionStorePlugin.class)).hasSize(1);
+        assertThat(pluginManager.getPlugins(WebSessionStorePlugin.class)).hasSize(1);
     }
 
     @Test
@@ -32,23 +32,23 @@ class DefaultPluginManagerTest {
         pluginManager.register(WebSessionStorePlugin.class, plugin1);
         var plugin2 = new Test2WebSessionStorePlugin();
         pluginManager.register(WebSessionStorePlugin.class, plugin2);
-        assertThat(pluginManager.getGroupPlugins(WebSessionStorePlugin.class)).containsOnly(plugin1, plugin2);
+        assertThat(pluginManager.getPlugins(WebSessionStorePlugin.class)).containsOnly(plugin1, plugin2);
 
-        pluginManager.remove(WebSessionStorePlugin.class, plugin1.pluginName());
-        assertThat(pluginManager.getGroupPlugins(WebSessionStorePlugin.class)).containsOnly(plugin2);
+        pluginManager.removeByPluginName(WebSessionStorePlugin.class, plugin1.pluginName());
+        assertThat(pluginManager.getPlugins(WebSessionStorePlugin.class)).containsOnly(plugin2);
     }
 
     @Test
     void getPlugin() {
         pluginManager.register(WebSessionStorePlugin.class, new Test1WebSessionStorePlugin());
-        assertThat(pluginManager.getPlugin(WebSessionStorePlugin.class, Test1WebSessionStorePlugin.class.getCanonicalName())).isNotNull();
+        assertThat(pluginManager.getPluginByPluginName(WebSessionStorePlugin.class, Test1WebSessionStorePlugin.class.getCanonicalName())).isNotNull();
     }
 
     @Test
-    void getGroupPlugins() {
+    void getPlugins() {
         var plugin = new Test1WebSessionStorePlugin();
         pluginManager.register(WebSessionStorePlugin.class, plugin);
-        assertThat(pluginManager.getGroupPlugins(WebSessionStorePlugin.class)).containsOnly(plugin);
+        assertThat(pluginManager.getPlugins(WebSessionStorePlugin.class)).containsOnly(plugin);
     }
 
     @Test
@@ -56,6 +56,6 @@ class DefaultPluginManagerTest {
         pluginManager.register(WebSessionStorePlugin.class, new Test1WebSessionStorePlugin());
         pluginManager.register(WebSessionStorePlugin.class, new Test2WebSessionStorePlugin());
         pluginManager.cleanup();
-        assertThatThrownBy(() -> pluginManager.getGroupPlugins(WebSessionStorePlugin.class)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> pluginManager.getPlugins(WebSessionStorePlugin.class)).isInstanceOf(NullPointerException.class);
     }
 }

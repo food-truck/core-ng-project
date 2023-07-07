@@ -27,13 +27,17 @@ public final class PluginSessionStore implements SessionStore, PluginInitializab
 
     @Override
     public void initialize(ModuleContext context) {
+        if (isAvailable()) {
+            throw new Error("Already initialize");
+        }
         this.plugins = Lists.newArrayList();
-        this.plugins.addAll(context.pluginManager.getGroupPlugins(WebSessionStorePlugin.class));
+        this.plugins.addAll(context.pluginManager.getPlugins(WebSessionStorePlugin.class));
+        validate();
     }
 
     @Override
     public Map<String, String> getAndRefresh(String sessionId, String domain, Duration timeout) {
-        check();
+        validate();
         var iterator = plugins.iterator();
         Map<String, String> session = null;
         while (iterator.hasNext()) {
@@ -44,7 +48,7 @@ public final class PluginSessionStore implements SessionStore, PluginInitializab
                     LOGGER.info("get session successful! plugin: {}", plugin.pluginName());
                 }
                 plugin.refresh(sessionId, domain, timeout);
-                LOGGER.info("refresh session, plugin: {}", plugin.pluginName());
+                LOGGER.debug("refresh session, plugin: {}", plugin.pluginName());
             } catch (Exception e) {
                 if (!iterator.hasNext()) {
                     throw e;
@@ -75,7 +79,7 @@ public final class PluginSessionStore implements SessionStore, PluginInitializab
     }
 
     private void eachRun(String method, Consumer<WebSessionStorePlugin> consumer) {
-        check();
+        validate();
         var iterator = plugins.iterator();
         while (iterator.hasNext()) {
             var plugin = iterator.next();
@@ -91,7 +95,7 @@ public final class PluginSessionStore implements SessionStore, PluginInitializab
         }
     }
 
-    private void check() {
+    private void validate() {
         if (!isAvailable()) {
             throw new IllegalStateException("Not Availiable!");
         } else if (plugins.isEmpty()) {
