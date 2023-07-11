@@ -4,6 +4,7 @@ import core.framework.async.Task;
 import core.framework.internal.module.Config;
 import core.framework.internal.module.ModuleContext;
 import core.framework.internal.module.ShutdownHook;
+import core.framework.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,6 +24,7 @@ public abstract class Module {
         logger.info("load module, module={}", module.getClass().getName());
         module.context = context;
         module.initialize();
+        context.prepareHook.invoke(module.getClass(), "initialize");
     }
 
     public void onShutdown(Task task) {
@@ -64,6 +66,11 @@ public abstract class Module {
     public void loadProperties(String classpath) {
         logger.info("load properties, classpath={}", classpath);
         context.propertyManager.properties.load(classpath);
+        if (!context.prepareHook.property.isEmpty()) {
+            var properties = new Properties();
+            properties.load(classpath);
+            properties.keys().forEach(key -> context.prepareHook.property(key, properties.get(key).orElse(null)));
+        }
     }
 
     public Optional<String> property(String key) {

@@ -4,7 +4,7 @@ import core.framework.http.HTTPMethod;
 import core.framework.internal.bean.BeanClassValidator;
 import core.framework.internal.inject.BeanFactory;
 import core.framework.internal.log.LogManager;
-import core.framework.internal.plugin.DefaultPluginManager;
+import core.framework.internal.plugin.InitializablePluginManager;
 import core.framework.internal.plugin.PluginManager;
 import core.framework.internal.stat.StatCollector;
 import core.framework.internal.web.HTTPServer;
@@ -41,13 +41,14 @@ public class ModuleContext {    // after core.framework.module.App.start(), enti
     public final ShutdownHook shutdownHook;
     public final ReadinessProbe probe = new ReadinessProbe();
     public final BeanFactory beanFactory = new BeanFactory();
+    public final PrepareHook prepareHook = new PrepareHook();
     public final PropertyManager propertyManager = new PropertyManager();
     public final StatCollector collector = new StatCollector();
     public final HTTPServer httpServer;
     public final HTTPServerConfig httpServerConfig = new HTTPServerConfig();
     public final APIController apiController = new APIController();
     public final BeanClassValidator beanClassValidator = new BeanClassValidator();
-    public final PluginManager pluginManager = new DefaultPluginManager();
+    public final PluginManager pluginManager = new InitializablePluginManager(this);
     protected final Map<String, Config> configs = Maps.newHashMap();
     final PropertyValidator propertyValidator = new PropertyValidator();
     private BackgroundTaskExecutor backgroundTask;
@@ -109,8 +110,10 @@ public class ModuleContext {    // after core.framework.module.App.start(), enti
             try {
                 config = configClass(configClass).getConstructor().newInstance();
                 config.initialize(this, name);
+                prepareHook.invoke(configClass, "initialize");
                 configs.put(key, config);
-            } catch (InstantiationException | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+            } catch (InstantiationException | IllegalAccessException | NoSuchMethodException
+                     | InvocationTargetException e) {
                 throw new Error(e);
             }
         }
@@ -119,6 +122,7 @@ public class ModuleContext {    // after core.framework.module.App.start(), enti
 
     public <T> T bind(Type type, @Nullable String name, T instance) {
         beanFactory.bind(type, name, instance);
+        prepareHook.bind(type, name, instance);
         return instance;
     }
 

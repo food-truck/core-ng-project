@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * @author rickeyhong
  */
-public sealed interface PluginManager permits DefaultPluginManager {
+public sealed interface PluginManager permits InitializablePluginManager {
     <T extends Plugin> void register(Class<T> plugin, T pluginImpl);
 
     <T extends Plugin> void remove(Class<T> plugin);

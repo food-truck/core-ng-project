@@ -1,5 +1,7 @@
 package core.framework.internal.plugin;
 
+import core.framework.internal.log.LogManager;
+import core.framework.internal.module.ModuleContext;
 import core.framework.plugin.Test1WebSessionStorePlugin;
 import core.framework.plugin.Test2WebSessionStorePlugin;
 import core.framework.plugin.WebSessionStorePlugin;
@@ -10,14 +12,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * @author rickeyhong 
+ * @author rickeyhong
  */
 class DefaultPluginManagerTest {
-    private DefaultPluginManager pluginManager;
-    
+    private InitializablePluginManager pluginManager;
+
     @BeforeEach
     void createDefaultPluginManagerTest() {
-        this.pluginManager = new DefaultPluginManager();
+        this.pluginManager = new InitializablePluginManager(new ModuleContext(new LogManager()));
     }
 
     @Test
