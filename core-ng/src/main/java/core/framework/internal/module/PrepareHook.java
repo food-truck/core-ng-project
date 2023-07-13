@@ -18,14 +18,23 @@ public class PrepareHook {
     public List<BiConsumer<String, String>> property = Lists.newArrayList();
 
     public void invoke(Class<?> invokeClass, String method) {
+        if (invoke == null) {
+            return;
+        }
         invoke.forEach(it -> it.accept(invokeClass, method));
     }
 
     public void bind(Type type, String name, Object instance) {
+        if (bind == null) {
+            return;
+        }
         bind.forEach(it -> it.accept(type, name, instance));
     }
 
     public void property(String key, String value) {
+        if (property == null) {
+            return;
+        }
         property.forEach(it -> it.accept(key, value));
     }
 

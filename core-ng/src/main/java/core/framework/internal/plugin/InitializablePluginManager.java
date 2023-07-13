@@ -47,8 +47,9 @@ public final class InitializablePluginManager implements PluginManager {
                     }
                     pluginInitializers.add(initializerPluginInitializable.getPluginInitializer());
                 } else if (pluginImpl instanceof PluginInitializable pluginInitializable) {
-                    context.beanFactory.inject(pluginImpl);
-                    pluginInitializable.initialize(context);
+                    context.startupHook.initialize.add(() -> pluginInitializable.initialize(context));
+                } else {
+                    context.startupHook.initialize.add(() -> context.beanFactory.inject(pluginImpl));
                 }
                 plugins.add(pluginImpl);
                 LOGGER.info("Registered plugin: {}, order: {}", pluginImpl.pluginName(), pluginImpl.order());
@@ -87,6 +88,11 @@ public final class InitializablePluginManager implements PluginManager {
 
     @Override
     public void cleanup() {
+        if (!pluginInitializers.isEmpty()) {
+            pluginInitializers.forEach(pluginInitializer ->
+                LOGGER.error("Unfinished initialization plugin initializer: {}", pluginInitializer.getClass().getCanonicalName()));
+            throw new Error("There are plugins that have not been initialized.");
+        }
         pluginMap = null;
         pluginInitializers = null;
     }
@@ -95,6 +101,7 @@ public final class InitializablePluginManager implements PluginManager {
         context.prepareHook.invoke.add((invokeClass, method) -> signal(pluginInitializer -> pluginInitializer.signal(invokeClass, method)));
         context.prepareHook.bind.add((type, name, instance) -> signal(pluginInitializer -> pluginInitializer.signal(type, name, instance)));
         context.prepareHook.property.add((key, value) -> signal(pluginInitializer -> pluginInitializer.signal(key, value)));
+        LOGGER.info("Added hooks");
     }
 
     private void signal(Predicate<PluginInitializer> handler) {
@@ -105,9 +112,8 @@ public final class InitializablePluginManager implements PluginManager {
         while (iterator.hasNext()) {
             var pluginInitializer = iterator.next();
             if (handler.test(pluginInitializer)) {
-                context.beanFactory.inject(pluginInitializer);
-                pluginInitializer.initialize(context);
                 iterator.remove();
+                pluginInitializer.initialize(context);
             }
         }
     }
