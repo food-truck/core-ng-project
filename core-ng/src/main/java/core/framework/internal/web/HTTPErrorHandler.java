@@ -7,8 +7,8 @@ import core.framework.internal.log.ActionLog;
 import core.framework.internal.web.request.RequestImpl;
 import core.framework.internal.web.response.ResponseHandler;
 import core.framework.internal.web.response.ResponseImpl;
-import core.framework.internal.web.service.CompatibleInternalErrorResponse;
 import core.framework.internal.web.service.ErrorResponse;
+import core.framework.internal.web.service.InternalErrorResponse;
 import core.framework.internal.web.service.WebServiceClient;
 import core.framework.log.ErrorCode;
 import core.framework.log.Severity;
@@ -73,8 +73,7 @@ public class HTTPErrorHandler {
 
     Object errorResponse(Throwable e, String userAgent, String actionId) {
         if (WebServiceClient.USER_AGENT.equals(userAgent)) {
-            // Compatible with core-ng 7.7. @see InternalErrorResponse
-            var response = new CompatibleInternalErrorResponse();
+            var response = new InternalErrorResponse();
             response.id = actionId;
             response.message = e.getMessage();
             response.stackTrace = Exceptions.stackTrace(e);
@@ -87,8 +86,6 @@ public class HTTPErrorHandler {
                 response.errorCode = "INTERNAL_ERROR";
                 response.severity = Severity.ERROR.name();
             }
-            response.compatibleStackTrace = response.stackTrace;
-            response.compatibleErrorCode = response.errorCode;
             return response;
         } else {
             var response = new ErrorResponse();

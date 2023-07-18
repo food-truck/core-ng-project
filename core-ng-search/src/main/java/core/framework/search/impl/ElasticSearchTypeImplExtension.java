@@ -24,33 +24,27 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import static core.framework.log.Markers.errorCode;
 
 /**
  * @author miller
  */
 public final class ElasticSearchTypeImplExtension<T> {
     private final Logger logger = LoggerFactory.getLogger(ElasticSearchTypeImplExtension.class);
-
     private final ElasticSearchImpl elasticSearch;
     private final String index;
-    private final long slowOperationThresholdInNanos;
     private final int maxResultWindow;
     private final Validator<T> validator;
 
     private final Class<T> documentClass;
 
-    ElasticSearchTypeImplExtension(String index, long slowOperationThresholdInNanos, Validator<T> validator, ElasticSearchImpl elasticSearch, Class<T> documentClass) {
+    ElasticSearchTypeImplExtension(String index, Validator<T> validator, ElasticSearchImpl elasticSearch, Class<T> documentClass) {
         this.elasticSearch = elasticSearch;
         this.maxResultWindow = elasticSearch.maxResultWindow;
         this.index = index;
-        this.slowOperationThresholdInNanos = slowOperationThresholdInNanos;
         this.validator = validator;
         this.documentClass = documentClass;
     }
@@ -80,7 +74,6 @@ public final class ElasticSearchTypeImplExtension<T> {
             long elapsed = watch.elapsed();
             ActionLogContext.track("elasticsearch", elapsed, hits, 0);
             logger.debug("search, hits={}, esTook={}, elapsed={}", hits, esTook, elapsed);
-            checkSlowOperation(elapsed);
         }
     }
 
@@ -96,7 +89,6 @@ public final class ElasticSearchTypeImplExtension<T> {
             long elapsed = watch.elapsed();
             ActionLogContext.track("elasticsearch", elapsed, 0, 1);
             logger.debug("index, index={}, id={}, routing={}, elapsed={}", index, request.id, request.routing, elapsed);
-            checkSlowOperation(elapsed);
         }
     }
 
@@ -123,7 +115,6 @@ public final class ElasticSearchTypeImplExtension<T> {
             long elapsed = watch.elapsed();
             ActionLogContext.track("elasticsearch", elapsed, 0, request.requests.size());
             logger.debug("bulkIndex, index={}, size={}, esTook={}, elapsed={}", index, request.requests.size(), esTook, elapsed);
-            checkSlowOperation(elapsed);
         }
     }
 
@@ -142,7 +133,6 @@ public final class ElasticSearchTypeImplExtension<T> {
             long elapsed = watch.elapsed();
             ActionLogContext.track("elasticsearch", elapsed);
             logger.debug("analyze, index={}, analyzer={}, elapsed={}", index, request.analyzer, elapsed);
-            checkSlowOperation(elapsed);
         }
     }
 
@@ -180,12 +170,6 @@ public final class ElasticSearchTypeImplExtension<T> {
         }
         builder.append("]");
         throw new SearchException(builder.build());
-    }
-
-    private void checkSlowOperation(long elapsed) {
-        if (elapsed > slowOperationThresholdInNanos) {
-            logger.warn(errorCode("SLOW_ES"), "slow elasticsearch operation, elapsed={}", Duration.ofNanos(elapsed));
-        }
     }
 
     private AnalyzeTokens.Token token(AnalyzeToken analyzeToken) {

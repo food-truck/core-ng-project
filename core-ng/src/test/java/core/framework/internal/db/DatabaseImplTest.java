@@ -1,10 +1,12 @@
 package core.framework.internal.db;
 
-import core.framework.db.Database;
 import core.framework.db.Transaction;
 import core.framework.db.UncheckedSQLException;
 import core.framework.internal.log.ActionLog;
+import core.framework.internal.log.LogLevel;
 import core.framework.internal.log.LogManager;
+import core.framework.internal.log.WarningContext;
+import core.framework.log.IOWarning;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 
+import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -34,7 +37,6 @@ class DatabaseImplTest {
         database = new DatabaseImpl("db");
         database.url("jdbc:hsqldb:mem:.;sql.syntax_mys=true");
         database.view(EntityView.class);
-        database.maxOperations = 10;
 
         database.execute("CREATE TABLE database_test (id INT PRIMARY KEY, string_field VARCHAR(20), enum_field VARCHAR(10), date_field DATE, date_time_field TIMESTAMP)");
     }
@@ -244,21 +246,46 @@ class DatabaseImplTest {
     void track() {
         var logManager = new LogManager();
         ActionLog actionLog = logManager.begin("begin", null);
-        actionLog.maxProcessTime(100);
+        actionLog.warningContext.maxProcessTimeInNano(100);
         database.track(100, 1, 0, 1);
         assertThat(actionLog.stats).containsEntry("db_queries", 1.0);
         database.track(100, 1, 0, 1);
         assertThat(actionLog.stats).containsEntry("db_queries", 2.0);
-        assertThatThrownBy(() -> {
-            for (int i = 0; i < 10; i++) {
-                database.track(100, 0, 1, 20);
-            }
-        }).isInstanceOf(Error.class)
-            .hasMessageContaining("too many db operations");
-        assertThat(actionLog.stats).containsEntry("db_queries", 182.0);
-        Database.maxOperations(100);
-        database.track(100, 0, 1, 20);
-        assertThat(actionLog.stats).containsEntry("db_queries", 202.0);
+        logManager.end("end");
+    }
+
+    @Test
+    @IOWarning(operation = "db", maxOperations = 5)
+    void trackWithTooManyDBOperations() throws NoSuchMethodException {
+        IOWarning[] warnings = getClass().getDeclaredMethod("trackWithTooManyDBOperations").getDeclaredAnnotationsByType(IOWarning.class); // for convenience of test, not actual usage
+
+        var logManager = new LogManager();
+        ActionLog actionLog = logManager.begin("begin", null);
+        actionLog.initializeWarnings(requireNonNull(WarningContext.warnings(warnings)));
+        for (int i = 0; i < 10; i++) {
+            database.track(100, 0, 1, 20);
+        }
+        assertThat(actionLog.stats).containsEntry("db_queries", 200.0);
+        logManager.end("end");
+
+        assertThat(actionLog.result).isEqualTo(LogLevel.WARN);
+        assertThat(actionLog.errorCode()).isEqualTo("HIGH_DB_IO");
+        assertThat(actionLog.errorMessage).startsWith("too many operations, operation=db");
+    }
+
+    @Test
+    @IOWarning(operation = "db", maxReads = 50)
+    @IOWarning(operation = "redis", maxReads = 10)
+    void trackWithReadTooManyRows() throws NoSuchMethodException {
+        IOWarning[] warnings = getClass().getDeclaredMethod("trackWithReadTooManyRows").getDeclaredAnnotationsByType(IOWarning.class); // for convenience of test, not actual usage
+
+        var logManager = new LogManager();
+        ActionLog actionLog = logManager.begin("begin", null);
+        actionLog.initializeWarnings(requireNonNull(WarningContext.warnings(warnings)));
+        database.track(100, 100, 1, 20);
+        assertThat(actionLog.result).isEqualTo(LogLevel.WARN);
+        assertThat(actionLog.errorCode()).isEqualTo("HIGH_DB_IO");
+        assertThat(actionLog.errorMessage).startsWith("read too many entries once, operation=db");
         logManager.end("end");
     }
 

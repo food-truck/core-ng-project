@@ -3,8 +3,8 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'org.flywaydb:flyway-gradle-plugin:8.3.0'
-        classpath 'org.flywaydb:flyway-mysql:8.3.0'
+        classpath 'org.flywaydb:flyway-gradle-plugin:9.14.1'
+        classpath 'org.flywaydb:flyway-mysql:9.14.1'
     }
 }
 
@@ -50,7 +50,7 @@ static String iamUser() {
 
 static String iamAccessToken() {
     def tokenJSON = metadata("token")
-    return (tokenJSON =~ /\{"access_token":"([^"]*)",.*/)[0][1];
+    return (tokenJSON =~ /\{"access_token":"([^"]*)",.*/)[0][1]
 }
 
 static String metadata(String attribute) {

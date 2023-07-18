@@ -1,6 +1,7 @@
 package core;
 
 import core.framework.http.HTTPClient;
+import core.framework.internal.log.appender.ConsoleAppender;
 import core.framework.json.Bean;
 import core.framework.kafka.MessagePublisher;
 import core.framework.log.message.ActionLogMessage;
@@ -8,9 +9,10 @@ import core.framework.log.message.EventMessage;
 import core.framework.log.message.LogTopics;
 import core.framework.log.message.StatMessage;
 import core.framework.module.App;
+import core.framework.module.KafkaConfig;
 import core.framework.search.module.SearchConfig;
 import core.log.LogForwardConfig;
-import core.log.LogGroupConfig;
+import core.log.LogIndexRouter;
 import core.log.domain.ActionDocument;
 import core.log.domain.EventDocument;
 import core.log.domain.StatDocument;
@@ -19,20 +21,17 @@ import core.log.job.CleanupOldIndexJob;
 import core.log.kafka.ActionLogMessageHandler;
 import core.log.kafka.EventMessageHandler;
 import core.log.kafka.StatMessageHandler;
-import core.log.service.ActionLogForwarder;
-import core.log.service.ActionService;
-import core.log.service.ConsoleAppenderExtension;
-import core.log.service.EventForwarder;
-import core.log.service.EventService;
-import core.log.service.IndexOption;
+import core.log.service.KafkaExtensionAppender;
 import core.log.service.IndexService;
-import core.log.service.JobConfig;
 import core.log.service.KibanaService;
-import core.log.service.StatService;
+import core.log.service.IndexOption;
+import core.log.service.AppGroupMappingLogIndexRouter;
+import core.log.service.ActionLogForwarder;
+import core.log.service.EventForwarder;
+import core.log.service.JobConfig;
 
 import java.time.Duration;
 import java.time.LocalTime;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -49,18 +48,14 @@ public class LogProcessorApp extends App {
 
         configureIndexOption();
         IndexService indexService = bind(IndexService.class);
-        ActionService actionService = bind(ActionService.class);
-        actionService.applicationGroupMapping(logGroupConfig());
-        bind(StatService.class);
-        bind(EventService.class);
-
-        configureLogAppender();
         onStartup(indexService::createIndexTemplates);
 
         configureKibanaService();
+
         Forwarders forwarders = configureLogForwarders();
         configureKafka(forwarders);
         configureJob();
+        configureLogAppender();
 
         load(new DiagramModule());
     }
@@ -81,7 +76,8 @@ public class LogProcessorApp extends App {
             if ("console".equals(appender)) {
                 log().appendToConsole();
             } else if ("consoleExtension".equals(appender)) {
-                log().appender(bind(ConsoleAppenderExtension.class));
+                kafka().publish(LogTopics.TOPIC_ACTION_LOG, ActionLogMessage.class);
+                log().appender(bind(KafkaExtensionAppender.class, new KafkaExtensionAppender(new ConsoleAppender())));
             }
         });
     }
@@ -100,7 +96,10 @@ public class LogProcessorApp extends App {
         kafka().minPoll(1024 * 1024, Duration.ofMillis(500));           // try to get at least 1M message
         kafka().maxPoll(2000, 3 * 1024 * 1024);     // get 3M message at max
 
-        kafka().subscribe(LogTopics.TOPIC_ACTION_LOG, ActionLogMessage.class, bind(new ActionLogMessageHandler(forwarders.action)));
+        var actionLogMessageHandler = new ActionLogMessageHandler(forwarders.action, property("app.log.group.mapping")
+            .<LogIndexRouter>map(config -> new AppGroupMappingLogIndexRouter("action", config))
+            .orElseGet(() -> new LogIndexRouter.FixedLogIndexRouter("action")), LogIndexRouter.DEFAULT_ROUTER);
+        kafka().subscribe(LogTopics.TOPIC_ACTION_LOG, ActionLogMessage.class, bind(actionLogMessageHandler));
         kafka().subscribe(LogTopics.TOPIC_STAT, StatMessage.class, bind(StatMessageHandler.class));
         kafka().subscribe(LogTopics.TOPIC_EVENT, EventMessage.class, bind(new EventMessageHandler(forwarders.event)));
     }
@@ -111,7 +110,6 @@ public class LogProcessorApp extends App {
         search.host(requiredProperty("sys.elasticsearch.host"));
         property("sys.elasticsearch.apiKey").ifPresent(search::auth);
         search.timeout(Duration.ofSeconds(20)); // use longer timeout/slowES threshold as log indexing can be slower with large batches
-        search.slowOperationThreshold(Duration.ofSeconds(10));
         search.type(ActionDocument.class);
         search.type(TraceDocument.class);
         search.type(StatDocument.class);
@@ -136,30 +134,18 @@ public class LogProcessorApp extends App {
         if (configValue != null) {
             Bean.register(LogForwardConfig.class);
             LogForwardConfig config = Bean.fromJSON(LogForwardConfig.class, configValue);
-            kafka("forward").uri(config.kafkaURI);
-            LogForwardConfig.Forward actionConfig = config.action;
-            if (actionConfig != null) {
-                MessagePublisher<ActionLogMessage> publisher = kafka("forward").publish(ActionLogMessage.class);
-                forwarders.action = new ActionLogForwarder(publisher, actionConfig.topic, actionConfig.apps, actionConfig.ignoreErrorCodes);
+            KafkaConfig kafka = kafka("forward");
+            kafka.uri(config.kafkaURI);
+            if (config.action != null) {
+                MessagePublisher<ActionLogMessage> publisher = kafka.publish(config.action.topic, ActionLogMessage.class);
+                forwarders.action = new ActionLogForwarder(publisher, config.action);
             }
-            LogForwardConfig.Forward eventConfig = config.event;
-            if (eventConfig != null) {
-                MessagePublisher<EventMessage> publisher = kafka("forward").publish(EventMessage.class);
-                forwarders.event = new EventForwarder(publisher, eventConfig.topic, eventConfig.apps, eventConfig.ignoreErrorCodes);
+            if (config.event != null) {
+                MessagePublisher<EventMessage> publisher = kafka.publish(config.event.topic, EventMessage.class);
+                forwarders.event = new EventForwarder(publisher, config.event);
             }
         }
         return forwarders;
-    }
-
-    private LogGroupConfig logGroupConfig() {
-        String logGroupConfigValue = property("app.log.group.mapping").orElse(null);
-        if (logGroupConfigValue != null) {
-            Bean.register(LogGroupConfig.class);
-            return Bean.fromJSON(LogGroupConfig.class, logGroupConfigValue);
-        }
-        LogGroupConfig logGroupConfig = new LogGroupConfig();
-        logGroupConfig.groups = Map.of();
-        return logGroupConfig;
     }
 
     static class Forwarders {
