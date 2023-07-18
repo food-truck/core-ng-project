@@ -1,5 +1,13 @@
 ## Change Log In Wonder
 
+### 2.0.2 (07/18/2023)
+* Vulnerabilities: upgrade dependency `org.xerial.snappy:snappy-java` to 1.1.10.2
+
+### 2.0.0 (06/14/2023)
+* lcorresponds to upstream version **8.1.2**
+* log-processor: refactor action log group mapping.
+* delete previous compatibility code.
+
 ### 1.3.1 (09/08/2022)
 * log-processor: change action index name separation from app level to group level.
 * log-processor: add `app.log.group.mapping` property to load action log group mapping.
