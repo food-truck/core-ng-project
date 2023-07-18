@@ -32,7 +32,7 @@ project('core-ng') {
         implementation 'com.squareup.okhttp3:okhttp:4.10.0'
         implementation 'io.undertow:undertow-core:2.3.5.Final'
         implementation "org.apache.kafka:kafka-clients:${kafkaVersion}@jar"
-        implementation 'org.xerial.snappy:snappy-java:1.1.8.4'      // used by kafka message compression
+        implementation 'org.xerial.snappy:snappy-java:1.1.10.2'      // used by kafka message compression
         compileOnly "com.mysql:mysql-connector-j:${mysqlVersion}"
         compileOnly 'org.jboss.logging:jboss-logging-annotations:2.2.1.Final'
         testImplementation "org.junit.jupiter:junit-jupiter-api:${junitVersion}"
