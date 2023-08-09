@@ -3,47 +3,47 @@
     {
       "name": "core-ng",
       "artifactId": "core-ng",
-      "version": "2.0.2"
+      "version": "2.0.3"
     },
     {
       "name": "core-ng-api",
       "artifactId": "core-ng-api",
-      "version": "2.0.2"
+      "version": "2.0.3"
     },
     {
       "name": "core-ng-json",
       "artifactId": "core-ng-json",
-      "version": "2.0.2"
+      "version": "2.0.3"
     },
     {
       "name": "core-ng-common",
       "artifactId": "core-ng-common",
-      "version": "2.0.2"
+      "version": "2.0.3"
     },
     {
       "name": "core-ng-mongo",
       "artifactId": "core-ng-mongo",
-      "version": "2.0.2"
+      "version": "2.0.3"
     },
     {
       "name": "core-ng-mongo-test",
       "artifactId": "core-ng-mongo-test",
-      "version": "2.0.2"
+      "version": "2.0.3"
     },
     {
       "name": "core-ng-search",
       "artifactId": "core-ng-search",
-      "version": "2.0.2"
+      "version": "2.0.3"
     },
     {
       "name": "core-ng-search-test",
       "artifactId": "core-ng-search-test",
-      "version": "2.0.2"
+      "version": "2.0.3"
     },
     {
       "name": "core-ng-test",
       "artifactId": "core-ng-test",
-      "version": "2.0.2"
+      "version": "2.0.3"
     }
   ]
 }
