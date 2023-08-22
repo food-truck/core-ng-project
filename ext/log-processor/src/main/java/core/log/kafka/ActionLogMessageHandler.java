@@ -12,6 +12,8 @@ import core.log.domain.ActionDocument;
 import core.log.domain.TraceDocument;
 import core.log.service.ActionLogForwarder;
 import core.log.service.IndexService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.time.LocalDate;
@@ -24,6 +26,7 @@ import java.util.stream.Collectors;
  * @author neo
  */
 public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMessage> {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ActionLogMessageHandler.class);
     @Nullable
     final ActionLogForwarder forwarder;
 
@@ -69,13 +72,17 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
 
     private void indexActions(Map<String, ActionDocument> actions, LocalDate now) {
         actions.entrySet().stream()
-                .collect(Collectors.groupingBy(entry -> Objects.requireNonNullElse(entry.getValue().app, "")))
-                .forEach((app, appActions) -> {
+            .collect(Collectors.groupingBy(entry -> Objects.requireNonNullElse(entry.getValue().app, "")))
+            .forEach((app, appActions) -> {
+                try {
                     BulkIndexRequest<ActionDocument> request = new BulkIndexRequest<>();
                     request.index = indexService.indexName(actionLogIndexRouter.route(app), now);
                     request.sources = appActions.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                     actionType.bulkIndex(request);
-                });
+                } catch (Exception e) {
+                    LOGGER.error("failure indexActions! errorMsg: " + e.getMessage(), e);
+                }
+            });
     }
 
     private void indexTraces(Map<String, TraceDocument> traces, LocalDate now) {
