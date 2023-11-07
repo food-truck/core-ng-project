@@ -14,6 +14,7 @@ import io.grpc.stub.AbstractBlockingStub;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -66,6 +67,9 @@ public class GRPCConfig extends Config {
     }
 
     public <T extends BindableService> void service(Class<T> serviceInterface, T service) {
+        if (services == null) {
+            services = new ArrayList<>();
+        }
         logger.info("create grpc service, interface={}", serviceInterface.getCanonicalName());
         services.add(service);
         serviceAdded = true;
