@@ -84,10 +84,10 @@ project('core-ng-grpc') {
     apply from: file("${rootDir}/gradle/lib.gradle")
     dependencies {
         api project(":core-ng")
+        api "io.grpc:grpc-protobuf:${grpcVersion}"
+        api "io.grpc:grpc-stub:${grpcVersion}"
+        api "io.grpc:grpc-services:${grpcVersion}"
         compileOnly "org.apache.tomcat:annotations-api:${tomcatAnnotationsVersion}"
-        implementation "io.grpc:grpc-protobuf:${grpcVersion}"
-        implementation "io.grpc:grpc-stub:${grpcVersion}"
-        implementation "io.grpc:grpc-services:${grpcVersion}"
         runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
     }
 }
