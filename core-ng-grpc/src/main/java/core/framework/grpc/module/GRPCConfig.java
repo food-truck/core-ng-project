@@ -4,10 +4,10 @@ import core.framework.grpc.impl.GRPCServer;
 import core.framework.internal.module.Config;
 import core.framework.internal.module.ModuleContext;
 import core.framework.internal.module.ShutdownHook;
+import io.grpc.BindableService;
 import io.grpc.Channel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
-import io.grpc.ServerServiceDefinition;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.stub.AbstractBlockingStub;
@@ -27,7 +27,7 @@ public class GRPCConfig extends Config {
     private ModuleContext context;
     private String name;
     private Integer port;
-    private List<ServerServiceDefinition> serviceDefinitions;
+    private List<BindableService> services;
     private GRPCServer grpcServer;
     private boolean serviceAdded;
     private boolean clientAdded;
@@ -40,15 +40,15 @@ public class GRPCConfig extends Config {
         if (serviceAdded) {
             var serverBuilder = ServerBuilder
                 .forPort(port)
-                .addServices(serviceDefinitions)
                 .addService(new HealthStatusManager().getHealthService())
                 .addService(ProtoReflectionService.newInstance());
+            services.forEach(serverBuilder::addService);
             grpcServer = new GRPCServer(serverBuilder);
             context.startupHook.start.add(() -> grpcServer.start());
             context.shutdownHook.add(ShutdownHook.STAGE_0, timeout -> grpcServer.shutdown());
             context.shutdownHook.add(ShutdownHook.STAGE_1, grpcServer::awaitRequestCompletion);
             context.shutdownHook.add(ShutdownHook.STAGE_8, timeout -> grpcServer.awaitTermination());
-            serviceDefinitions = null;
+            services = null;
         }
     }
 
@@ -65,9 +65,9 @@ public class GRPCConfig extends Config {
         this.port = port;
     }
 
-    public <T extends ServerServiceDefinition> void service(Class<T> serviceInterface, T service) {
+    public <T extends BindableService> void service(Class<T> serviceInterface, T service) {
         logger.info("create grpc service, interface={}", serviceInterface.getCanonicalName());
-        serviceDefinitions.add(service);
+        services.add(service);
         serviceAdded = true;
     }
 
