@@ -23,12 +23,12 @@
     {
       "name": "core-ng-grpc",
       "artifactId": "core-ng-grpc",
-      "version": "2.0.4-SNAPSHOT.1"
+      "version": "2.0.4-SNAPSHOT.2"
     },
     {
       "name": "core-ng-grpc-test",
       "artifactId": "core-ng-grpc-test",
-      "version": "2.0.4-SNAPSHOT.1"
+      "version": "2.0.4-SNAPSHOT.2"
     },
     {
       "name": "core-ng-mongo",
