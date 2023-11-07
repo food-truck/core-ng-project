@@ -17,15 +17,14 @@ import static core.framework.log.Markers.errorCode;
  */
 public class GRPCServer {
     private final Logger logger = LoggerFactory.getLogger(GRPCServer.class);
-    private final Server server;
+    private Server server;
 
-    public GRPCServer(ServerBuilder<?> serverBuilder) {
-        server = serverBuilder.build();
-    }
-
-    public void start() {
+    public void start(GRPCServerConfig serverConfig) {
         var watch = new StopWatch();
         try {
+            var builder = ServerBuilder.forPort(serverConfig.port);
+            serverConfig.services.forEach(builder::addService);
+            server = builder.build();
             server.start();
         } catch (IOException e) {
             throw new UncheckedIOException(e);

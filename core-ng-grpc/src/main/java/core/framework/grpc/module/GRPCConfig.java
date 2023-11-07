@@ -1,21 +1,17 @@
 package core.framework.grpc.module;
 
 import core.framework.grpc.impl.GRPCServer;
+import core.framework.grpc.impl.GRPCServerConfig;
 import core.framework.internal.module.Config;
 import core.framework.internal.module.ModuleContext;
 import core.framework.internal.module.ShutdownHook;
 import io.grpc.BindableService;
 import io.grpc.Channel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.ServerBuilder;
-import io.grpc.protobuf.services.HealthStatusManager;
-import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.stub.AbstractBlockingStub;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.function.Function;
 
 import static core.framework.util.Strings.format;
@@ -25,10 +21,9 @@ import static core.framework.util.Strings.format;
  */
 public class GRPCConfig extends Config {
     private final Logger logger = LoggerFactory.getLogger(GRPCConfig.class);
+    private final GRPCServerConfig serverConfig = new GRPCServerConfig();
     private ModuleContext context;
     private String name;
-    private Integer port;
-    private List<BindableService> services;
     private GRPCServer grpcServer;
     private boolean serviceAdded;
     private boolean clientAdded;
@@ -38,40 +33,29 @@ public class GRPCConfig extends Config {
         this.context = context;
         this.name = name;
 
-        if (serviceAdded) {
-            var serverBuilder = ServerBuilder
-                .forPort(port)
-                .addService(new HealthStatusManager().getHealthService())
-                .addService(ProtoReflectionService.newInstance());
-            services.forEach(serverBuilder::addService);
-            grpcServer = new GRPCServer(serverBuilder);
-            context.startupHook.start.add(() -> grpcServer.start());
-            context.shutdownHook.add(ShutdownHook.STAGE_0, timeout -> grpcServer.shutdown());
-            context.shutdownHook.add(ShutdownHook.STAGE_1, grpcServer::awaitRequestCompletion);
-            context.shutdownHook.add(ShutdownHook.STAGE_8, timeout -> grpcServer.awaitTermination());
-            services = null;
-        }
+        grpcServer = new GRPCServer();
+        context.startupHook.start.add(() -> grpcServer.start(serverConfig));
+        context.shutdownHook.add(ShutdownHook.STAGE_0, timeout -> grpcServer.shutdown());
+        context.shutdownHook.add(ShutdownHook.STAGE_1, grpcServer::awaitRequestCompletion);
+        context.shutdownHook.add(ShutdownHook.STAGE_8, timeout -> grpcServer.awaitTermination());
     }
 
     @Override
     protected void validate() {
-        if (port == null) throw new Error("grpc port must be configured, name=" + name);
+        if (serverConfig.port == null) throw new Error("grpc port must be configured, name=" + name);
         if (!serviceAdded && !clientAdded)
             throw new Error("grpc is configured but no service/client added, please remove unnecessary config, name=" + name);
     }
 
-    private void port(Integer port) {
-        if (this.port != null)
-            throw new Error(format("grpc server port is already configured, name={}, port={}, previous={}", name, port, this.port));
-        this.port = port;
+    public void port(Integer port) {
+        if (serverConfig.port != null)
+            throw new Error(format("grpc server port is already configured, name={}, port={}, previous={}", name, port, serverConfig.port));
+        serverConfig.port = port;
     }
 
     public <T extends BindableService> void service(Class<T> serviceInterface, T service) {
-        if (services == null) {
-            services = new ArrayList<>();
-        }
         logger.info("create grpc service, interface={}", serviceInterface.getCanonicalName());
-        services.add(service);
+        serverConfig.services.add(service);
         serviceAdded = true;
     }
 
