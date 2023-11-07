@@ -48,6 +48,7 @@ public class GRPCConfig extends Config {
             context.shutdownHook.add(ShutdownHook.STAGE_0, timeout -> grpcServer.shutdown());
             context.shutdownHook.add(ShutdownHook.STAGE_1, grpcServer::awaitRequestCompletion);
             context.shutdownHook.add(ShutdownHook.STAGE_8, timeout -> grpcServer.awaitTermination());
+            serviceDefinitions = null;
         }
     }
 
