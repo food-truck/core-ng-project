@@ -15,6 +15,7 @@ def mockitoVersion = '5.3.1'
 def assertjVersion = '3.24.2'
 def mysqlVersion = '8.0.33'
 def grpcVersion = '1.56.0'
+def tomcatAnnotationsVersion = '6.0.53'
 
 project('core-ng-api') {
     apply from: file("${rootDir}/gradle/lib.gradle")

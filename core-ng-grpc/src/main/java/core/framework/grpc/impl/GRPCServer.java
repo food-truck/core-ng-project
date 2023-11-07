@@ -1,7 +1,6 @@
 package core.framework.grpc.impl;
 
 import core.framework.util.StopWatch;
-import io.grpc.BindableService;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import org.slf4j.Logger;
@@ -18,15 +17,10 @@ import static core.framework.log.Markers.errorCode;
  */
 public class GRPCServer {
     private final Logger logger = LoggerFactory.getLogger(GRPCServer.class);
-    private Server server;
-    private Integer port;
+    private final Server server;
 
     public GRPCServer(ServerBuilder<?> serverBuilder) {
-
-    }
-
-    public <T extends BindableService> void service(T service) {
-        server.
+        server = serverBuilder.build();
     }
 
     public void start() {
@@ -36,7 +30,7 @@ public class GRPCServer {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
-            logger.info("grpc server started, port={}, elapsed={}", port, watch.elapsed());
+            logger.info("grpc server started, port={}, elapsed={}", server.getPort(), watch.elapsed());
         }
     }
 
@@ -56,6 +50,13 @@ public class GRPCServer {
             } else {
                 logger.info("active grpc requests complete");
             }
+        }
+    }
+
+    public void awaitTermination() throws InterruptedException {
+        if (server != null) {
+            server.awaitTermination();
+            logger.info("grpc server stopped");
         }
     }
 }
