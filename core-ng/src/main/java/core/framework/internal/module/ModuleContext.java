@@ -6,6 +6,7 @@ import core.framework.internal.inject.BeanFactory;
 import core.framework.internal.log.LogManager;
 import core.framework.internal.stat.StatCollector;
 import core.framework.internal.web.HTTPServer;
+import core.framework.internal.web.HTTPServerConfig;
 import core.framework.internal.web.HTTPServerMetrics;
 import core.framework.internal.web.controller.ControllerClassValidator;
 import core.framework.internal.web.controller.ControllerHolder;
@@ -32,7 +33,7 @@ import java.util.Set;
 /**
  * @author neo
  */
-public class ModuleContext {
+public class ModuleContext {    // after core.framework.module.App.start(), entire ModuleContext will be GCed
     public final LogManager logManager;
     public final StartupHook startupHook = new StartupHook();
     public final ShutdownHook shutdownHook;
@@ -41,6 +42,7 @@ public class ModuleContext {
     public final PropertyManager propertyManager = new PropertyManager();
     public final StatCollector collector = new StatCollector();
     public final HTTPServer httpServer;
+    public final HTTPServerConfig httpServerConfig = new HTTPServerConfig();
     public final APIController apiController = new APIController();
     public final BeanClassValidator beanClassValidator = new BeanClassValidator();
     protected final Map<String, Config> configs = Maps.newHashMap();
@@ -68,7 +70,7 @@ public class ModuleContext {
         beanFactory.bind(SessionContext.class, null, httpServer.siteManager.sessionManager);
         beanFactory.bind(WebDirectory.class, null, httpServer.siteManager.webDirectory);
 
-        startupHook.start.add(httpServer::start);
+        startupHook.start.add(() -> httpServer.start(httpServerConfig));
         shutdownHook.add(ShutdownHook.STAGE_0, timeout -> httpServer.shutdown());
         shutdownHook.add(ShutdownHook.STAGE_1, httpServer::awaitRequestCompletion);
         shutdownHook.add(ShutdownHook.STAGE_8, timeout -> httpServer.awaitTermination());

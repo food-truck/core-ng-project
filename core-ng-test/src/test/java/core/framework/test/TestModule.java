@@ -5,6 +5,8 @@ import core.framework.http.HTTPClient;
 import core.framework.kafka.Message;
 import core.framework.scheduler.Job;
 import core.framework.test.db.TestDBEntity;
+import core.framework.test.db.TestDBEntityWithJSON;
+import core.framework.test.db.TestDBProjection;
 import core.framework.test.db.TestDBView;
 import core.framework.test.inject.TestBean;
 import core.framework.test.kafka.TestMessage;
@@ -116,11 +118,11 @@ public class TestModule extends AbstractTestModule {
         db().url("jdbc:mysql://localhost:3306/test");
         db().isolationLevel(IsolationLevel.READ_UNCOMMITTED);
         db().timeout(Duration.ofSeconds(10));
-        db().slowOperationThreshold(Duration.ofSeconds(5));
         db().longTransactionThreshold(Duration.ofSeconds(5));
-        db().tooManyRowsReturnedThreshold(1000);
         db().repository(TestDBEntity.class);
+        db().repository(TestDBEntityWithJSON.class);
         db().view(TestDBView.class);
+        db().view(TestDBProjection.class);
         initDB().createSchema();
     }
 

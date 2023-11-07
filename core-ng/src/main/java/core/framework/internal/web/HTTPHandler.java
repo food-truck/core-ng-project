@@ -18,7 +18,7 @@ import core.framework.internal.web.route.Route;
 import core.framework.internal.web.session.SessionManager;
 import core.framework.internal.web.site.TemplateManager;
 import core.framework.internal.web.websocket.WebSocketHandler;
-import core.framework.util.Lists;
+import core.framework.module.WebSocketConfig;
 import core.framework.web.Interceptor;
 import core.framework.web.Response;
 import io.undertow.server.HttpHandler;
@@ -43,23 +43,22 @@ public class HTTPHandler implements HttpHandler {
 
     public final RequestParser requestParser = new RequestParser();
     public final Route route = new Route();
-    public final List<Interceptor> interceptors = Lists.newArrayList();
     public final WebContextImpl webContext = new WebContextImpl();
     public final HTTPErrorHandler errorHandler;
 
     public final RequestBeanReader requestBeanReader = new RequestBeanReader();
     public final ResponseBeanWriter responseBeanWriter = new ResponseBeanWriter();
 
-    public final RateControl rateControl = new RateControl(1000);   // save at max 1000 group/ip combination
+    public final RateControl rateControl = new RateControl();
 
     private final Logger logger = LoggerFactory.getLogger(HTTPHandler.class);
     private final LogManager logManager;
     private final SessionManager sessionManager;
     private final ResponseHandler responseHandler;
 
+    public Interceptor[] interceptors;
     public WebSocketHandler webSocketHandler;
     public IPv4AccessControl accessControl;
-
     public long maxProcessTimeInNano = Duration.ofSeconds(30).toNanos();    // the default backend timeout of popular cloud lb (gcloud/azure) is 30s
 
     HTTPHandler(LogManager logManager, SessionManager sessionManager, TemplateManager templateManager) {
@@ -86,7 +85,7 @@ public class HTTPHandler implements HttpHandler {
         try {
             webContext.initialize(request);
 
-            logger.debug("httpDelay={}", httpDelay);    // http delay is usually low, so not to use Duration format
+            logger.debug("httpDelay={}", httpDelay);    // http delay includes request body parsing time, it could be long if client sent post body slowly, and it is usually low, so not to use Duration format
             actionLog.stats.put("http_delay", (double) httpDelay);
 
             requestParser.parse(request, exchange, actionLog);
@@ -97,6 +96,7 @@ public class HTTPHandler implements HttpHandler {
             linkContext(actionLog, headers);
 
             if (webSocketHandler != null && webSocketHandler.checkWebSocket(request.method(), headers)) {
+                rateControl.validateRate(WebSocketConfig.WS_OPEN_GROUP, request.clientIP());
                 webSocketHandler.handle(exchange, request, actionLog);
                 return; // with WebSocket, not save session
             }
@@ -105,6 +105,7 @@ public class HTTPHandler implements HttpHandler {
             actionLog.action(controller.action);
             actionLog.context.put("controller", List.of(controller.controllerInfo));
             logger.debug("controller={}", controller.controllerInfo);
+            if (controller.warnings != null) actionLog.initializeWarnings(controller.warnings);
 
             request.session = sessionManager.load(request, actionLog);  // load session as late as possible, so for sniffer/scan request with sessionId, it won't call redis every time even for 404/405
 
@@ -136,7 +137,7 @@ public class HTTPHandler implements HttpHandler {
         String trace = headers.getFirst(HEADER_TRACE);
         if (trace != null) actionLog.trace = Trace.parse(trace);
 
-        actionLog.maxProcessTime(maxProcessTime(headers.getFirst(HTTPHandler.HEADER_TIMEOUT)));
+        actionLog.warningContext.maxProcessTimeInNano(maxProcessTime(headers.getFirst(HTTPHandler.HEADER_TIMEOUT)));
     }
 
     long maxProcessTime(String timeout) {

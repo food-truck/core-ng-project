@@ -14,6 +14,7 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.TimerTask;
 
+// track change with https://github.com/mysql/mysql-connector-j/blob/release/8.0/src/main/core-impl/java/com/mysql/cj/CancelQueryTaskImpl.java (last updated on 2022-01-17)
 public class CancelQueryTaskImpl extends TimerTask implements CancelQueryTask {
     private static final Logger LOGGER = LoggerFactory.getLogger(CancelQueryTaskImpl.class);
 
@@ -68,13 +69,13 @@ public class CancelQueryTaskImpl extends TimerTask implements CancelQueryTask {
             String user = authProvider != null ? authProvider.user() : hostInfo.getUser();
             String password = authProvider != null ? authProvider.accessToken() : hostInfo.getPassword();
 
-            LOGGER.warn("kill query due to timeout, processId={}, query={}", origConnId, queryToCancel);
+            LOGGER.warn("kill query due to timeout, processId={}, query={}", origConnId, localQueryToCancel);
 
             NativeSession newSession = null;
             try {
                 newSession = new NativeSession(hostInfo, session.getPropertySet());
                 newSession.connect(hostInfo, user, password, database, 30000, new DefaultTransactionEventHandler());
-                newSession.sendCommand(new NativeMessageBuilder(newSession.getServerSession().supportsQueryAttributes())
+                newSession.getProtocol().sendCommand(new NativeMessageBuilder(newSession.getServerSession().supportsQueryAttributes())
                     .buildComQuery(newSession.getSharedSendPacket(), "KILL QUERY " + origConnId), false, 0);
             } finally {
                 close(newSession);
