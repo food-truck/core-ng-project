@@ -36,6 +36,7 @@ public class HTTPIOHandler implements HttpHandler {
     @Override
     public void handleRequest(HttpServerExchange exchange) throws Exception {
         if (HEALTH_CHECK_PATH.equals(exchange.getRequestPath())) {      // not treat health-check as action
+            handler.addKeepAliveHeader(exchange);
             exchange.endExchange(); // end exchange will send 200 / content-length=0
             return;
         }
@@ -63,7 +64,7 @@ public class HTTPIOHandler implements HttpHandler {
             }
         }
 
-        exchange.dispatch(handler);
+        exchange.dispatch(handler.worker, handler);
     }
 
     // undertow is not handling max entity size checking correctly, it terminates request directly and bypass exchange.endExchange() in certain cases, and log errors in debug level

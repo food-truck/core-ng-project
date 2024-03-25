@@ -2,10 +2,12 @@ package org.elasticsearch.plugins;
 
 import org.elasticsearch.Version;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.jdk.ModuleQualifiedExportsService;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author neo
@@ -25,8 +27,8 @@ public class LocalPluginsService extends PluginsService {
                 pluginClass.getName(),
                 "classpath plugin",
                 "NA",
-                Version.CURRENT,
-                "17",
+                Version.CURRENT.toString(),
+                "21",
                 pluginClass.getName(),
                 null,
                 List.of(),
@@ -41,5 +43,9 @@ public class LocalPluginsService extends PluginsService {
     @Override
     protected final List<LoadedPlugin> plugins() {
         return this.plugins;
+    }
+
+    @Override
+    protected void addServerExportsService(Map<String, List<ModuleQualifiedExportsService>> qualifiedExports) {
     }
 }

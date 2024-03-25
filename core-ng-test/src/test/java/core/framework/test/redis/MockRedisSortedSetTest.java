@@ -32,6 +32,16 @@ class MockRedisSortedSetTest {
     }
 
     @Test
+    void increaseScoreBy() {
+        assertThat(sortedSet.increaseScoreBy("key", "1", 1)).isEqualTo(1);
+        assertThat(sortedSet.increaseScoreBy("key", "1", 1)).isEqualTo(2);
+        assertThat(sortedSet.increaseScoreBy("key", "2", 2)).isEqualTo(2);
+        assertThat(sortedSet.increaseScoreBy("key", "2", 2)).isEqualTo(4);
+
+        assertThat(sortedSet.range("key", 0, -1)).containsExactly(entry("1", 2L), entry("2", 4L));
+    }
+
+    @Test
     void addOnlyIfAbsent() {
         assertThat(sortedSet.add("key1", Map.of("1", 1L), true)).isEqualTo(1);
         assertThat(sortedSet.add("key1", Map.of("1", 2L), true)).isEqualTo(0);

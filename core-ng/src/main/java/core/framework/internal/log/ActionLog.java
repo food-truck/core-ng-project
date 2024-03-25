@@ -4,8 +4,6 @@ import core.framework.log.Markers;
 import core.framework.util.Strings;
 
 import javax.annotation.Nullable;
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
 import java.text.DecimalFormat;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
@@ -25,7 +23,6 @@ public final class ActionLog {
     static final int MAX_CONTEXT_VALUES_SIZE = 5000;    // e.g. roughly 5000 "order_id=UUID"=>(8+36+3)*5000=235k
 
     private static final String LOGGER = LoggerImpl.abbreviateLoggerName(ActionLog.class.getCanonicalName());
-    private static final ThreadMXBean THREAD = ManagementFactory.getThreadMXBean();
     private static final int SOFT_EVENTS_LIMIT = 3000;    // normally 3000 lines trace is about 350k, and limit memory usage for each action
 
     public final String id;
@@ -37,7 +34,6 @@ public final class ActionLog {
     final Map<String, PerformanceStat> performanceStats;
     private final List<LogEvent> events;
     private final long startTime;
-    private final long startCPUTime;
     public LogLevel result = LogLevel.INFO;
     public Trace trace = Trace.NONE;        // whether flush trace log for all subsequent actions
     public String action = "unassigned";
@@ -50,7 +46,6 @@ public final class ActionLog {
 
     public ActionLog(String message, String id) {
         startTime = System.nanoTime();
-        startCPUTime = THREAD.getCurrentThreadCpuTime();
         date = Instant.now();
         if (id == null) {
             this.id = LogManager.ID_GENERATOR.next(date);
@@ -85,8 +80,6 @@ public final class ActionLog {
             stat.checkTotalIO();
         }
 
-        double cpuTime = THREAD.getCurrentThreadCpuTime() - startCPUTime;
-        stats.put("cpu_time", cpuTime);
         elapsed = elapsed();
         add(event("elapsed={}", elapsed));
         warningContext.checkMaxProcessTime(elapsed);
