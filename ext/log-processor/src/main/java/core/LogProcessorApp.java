@@ -92,7 +92,7 @@ public class LogProcessorApp extends App {
 
     private void configureKafka(Forwarders forwarders) {
         kafka().uri(requiredProperty("sys.kafka.uri"));
-        kafka().poolSize(Runtime.getRuntime().availableProcessors() == 1 ? 1 : 2);
+        kafka().concurrency(2);
         kafka().minPoll(1024 * 1024, Duration.ofMillis(500));           // try to get at least 1M message
         kafka().maxPoll(2000, 3 * 1024 * 1024);     // get 3M message at max
 
@@ -106,9 +106,12 @@ public class LogProcessorApp extends App {
 
     private void configureSearch() {
         SearchConfig search = config(SearchConfig.class);
-        property("sys.elasticsearch.checkProbe").ifPresent(checkProbe -> search.checkProbe(Boolean.parseBoolean(checkProbe)));
         search.host(requiredProperty("sys.elasticsearch.host"));
-        property("sys.elasticsearch.apiKey").ifPresent(search::auth);
+        String apiKeyId = property("sys.elasticsearch.apiKeyId").orElse(null);
+        String apiKeySecret = property("sys.elasticsearch.apiKeySecret").orElse(null);
+        if (apiKeyId != null && apiKeySecret != null) {
+            search.auth(apiKeyId, apiKeySecret);
+        }
         search.timeout(Duration.ofSeconds(20)); // use longer timeout/slowES threshold as log indexing can be slower with large batches
         search.type(ActionDocument.class);
         search.type(TraceDocument.class);

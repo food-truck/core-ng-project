@@ -1,6 +1,7 @@
 package core.framework.internal.stat;
 
 import com.sun.management.OperatingSystemMXBean;
+import core.framework.internal.async.VirtualThread;
 import core.framework.util.Files;
 import core.framework.util.Lists;
 import org.slf4j.Logger;
@@ -46,6 +47,7 @@ public class StatCollector {
     public void collectJVMUsage(Stats stats) {
         collectCPUUsage(stats);
         stats.put("thread_count", thread.getThreadCount());
+        stats.put("virtual_thread_count", VirtualThread.COUNT.max());
         collectHeapUsage(stats);
 
         for (GCStat gcStat : gcStats) {
@@ -114,6 +116,7 @@ public class StatCollector {
         boolean highUsage = stats.checkHighUsage(usage, highCPUUsageThreshold, "cpu");
         if (highUsage) {
             stats.info("thread_dump", Diagnostic.thread());
+            stats.info("virtual_thread_dump", Diagnostic.virtualThread());
         }
     }
 }

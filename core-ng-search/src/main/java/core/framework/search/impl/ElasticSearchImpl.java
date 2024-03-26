@@ -15,12 +15,13 @@ import core.framework.search.ClusterStateResponse;
 import core.framework.search.ElasticSearch;
 import core.framework.search.ElasticSearchType;
 import core.framework.search.SearchException;
+import core.framework.util.Encodings;
 import core.framework.util.StopWatch;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
-import org.apache.http.util.EntityUtils;
 import org.apache.http.message.BasicHeader;
+import org.apache.http.util.EntityUtils;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.RestClient;
@@ -41,9 +42,9 @@ public class ElasticSearchImpl implements ElasticSearch {
 
     public Duration timeout = Duration.ofSeconds(15);
     public HttpHost[] hosts;
-    public String apiKey;
     public int maxResultWindow = 10000;
     ElasticsearchClient client;
+    Header authHeader;
     private RestClient restClient;
     private ObjectMapper mapper;
 
@@ -51,12 +52,12 @@ public class ElasticSearchImpl implements ElasticSearch {
     public void initialize() {
         if (client == null) {   // initialize can be called by initSearch explicitly during test,
             RestClientBuilder builder = RestClient.builder(hosts);
-            if (apiKey != null) {
-                Header[] authHeader = {new BasicHeader("Authorization", "ApiKey " + apiKey)};
-                builder.setDefaultHeaders(authHeader);
+            if (authHeader != null) {
+                builder.setDefaultHeaders(new Header[]{authHeader});
             }
-            builder.setRequestConfigCallback(config -> config.setSocketTimeout((int) timeout.toMillis())
-                .setConnectionRequestTimeout((int) timeout.toMillis())); // timeout of requesting connection from connection pool
+            builder.setRequestConfigCallback(config -> config.setConnectionRequestTimeout(5_000)    // timeout of requesting connection from connection pool
+                .setConnectTimeout(5_000)   // 5s, usually es is within same network, use shorter timeout to fail fast
+                .setSocketTimeout((int) timeout.toMillis()));
             builder.setHttpClientConfigCallback(config -> config.setMaxConnTotal(100)
                 .setMaxConnPerRoute(100)
                 .setKeepAliveStrategy((response, context) -> Duration.ofSeconds(30).toMillis())
@@ -75,6 +76,11 @@ public class ElasticSearchImpl implements ElasticSearch {
         } finally {
             logger.info("register elasticsearch type, documentClass={}, elapsed={}", documentClass.getCanonicalName(), watch.elapsed());
         }
+    }
+
+    public void auth(String apiKeyId, String apiKeySecret) {
+        if (apiKeyId == null) throw new Error("apiKeyId must not be null");
+        authHeader = new BasicHeader("Authorization", "ApiKey " + Encodings.base64(apiKeyId + ":" + apiKeySecret));
     }
 
     public void close() throws IOException {

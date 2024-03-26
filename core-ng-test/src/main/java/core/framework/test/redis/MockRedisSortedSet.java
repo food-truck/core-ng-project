@@ -37,6 +37,19 @@ public class MockRedisSortedSet implements RedisSortedSet {
     }
 
     @Override
+    public long increaseScoreBy(String key, String value, long increment) {
+        var sortedSet = store.putIfAbsent(key, new MockRedisStore.SortedSet()).sortedSet();
+        Long currentScore = sortedSet.get(value);
+        if (currentScore == null) {
+            sortedSet.put(value, increment);
+            return increment;
+        }
+        long score = currentScore + increment;
+        sortedSet.put(value, score);
+        return score;
+    }
+
+    @Override
     public Map<String, Long> range(String key, long start, long stop) {
         var value = store.get(key);
         if (value == null) return Map.of();
