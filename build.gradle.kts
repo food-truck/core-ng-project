@@ -30,10 +30,33 @@ project("core-ng-api") {
     apply(plugin = "lib")
 }
 
-project("core-ng") {
+project("core-ng-json") {
     apply(plugin = "lib")
     dependencies {
         api(project(":core-ng-api"))
+        api(project(":core-ng-common"))
+        implementation("com.fasterxml.jackson.module:jackson-module-afterburner:${jacksonVersion}")
+        implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jacksonVersion}")
+        testImplementation("org.junit.jupiter:junit-jupiter-api:${junitVersion}")
+        testImplementation("org.assertj:assertj-core:${assertjVersion}")
+        testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
+    }
+}
+
+project("core-ng-common") {
+    apply(plugin = "lib")
+    dependencies {
+        api("org.slf4j:slf4j-api:2.0.12")
+        testImplementation("org.junit.jupiter:junit-jupiter-api:${junitVersion}")
+        testImplementation("org.assertj:assertj-core:${assertjVersion}")
+        testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
+    }
+}
+
+project("core-ng") {
+    apply(plugin = "lib")
+    dependencies {
+        api(project(":core-ng-json"))
         api("org.slf4j:slf4j-api:2.0.12")
         implementation("org.javassist:javassist:3.30.2-GA")
         implementation("com.fasterxml.jackson.module:jackson-module-afterburner:${jacksonVersion}")
