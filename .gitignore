@@ -1,6 +1,6 @@
 .idea/
 /.gradle/
-/build/
+**/build/
 buildSrc/.gradle/
 buildSrc/build/
 buildSrc/out/
@@ -11,5 +11,3 @@ buildSrc/out/
 node_modules/
 wiki/
 .fleet/
-
-

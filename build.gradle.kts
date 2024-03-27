@@ -26,6 +26,15 @@ val junitVersion = "5.10.2"
 val mockitoVersion = "5.10.0"
 val assertjVersion = "3.25.3"
 
+configure(subprojects.filter {
+    listOf("core-ng-api", "core-ng-json", "core-ng-common").contains(it.name)
+}) {
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
 project("core-ng-api") {
     apply(plugin = "lib")
 }
@@ -50,6 +59,7 @@ project("core-ng-common") {
         testImplementation("org.junit.jupiter:junit-jupiter-api:${junitVersion}")
         testImplementation("org.assertj:assertj-core:${assertjVersion}")
         testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
+        compileOnly("com.github.spotbugs:spotbugs-annotations:4.8.3")
     }
 }
 
