@@ -2,7 +2,7 @@
 
 PROJECT="log-collector"
 IMAGE_NAME="core-ng-project/${PROJECT}"
-VERSION="2.0.4"
+VERSION="3.0.0"
 
 ../gradlew -p ${PROJECT} check docker
 

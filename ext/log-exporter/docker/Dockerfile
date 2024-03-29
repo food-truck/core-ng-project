@@ -1,4 +1,4 @@
-FROM        wonderd/jre-alpine:17
+FROM        wonder/jdk:21-alpine
 LABEL       app=log-exporter
 RUN         apk add --no-cache python3 curl
 # gcloud iam requires user home, so must not put --no-create-home
