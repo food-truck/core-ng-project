@@ -20,11 +20,8 @@ data class Module(
 var json = Json { ignoreUnknownKeys = true }
 var publishConf = json.decodeFromString<Publish>(rootProject.file("publish.json").readText())
 
-val publishMavenURL: String by project
-val publishMavenAccessToken: String by project
-extra["publishMavenURL"] = project.findProperty("mavenURL") ?: "https://pkgs.dev.azure.com/foodtruckinc/Wonder/_packaging/maven-local/maven/v1"
-extra["publishMavenAccessToken"] = project.findProperty("mavenAccessToken") ?: System.getenv("MAVEN_ACCESS_TOKEN")
-
+val publishMavenURL = project.findProperty("mavenURL") ?: "https://pkgs.dev.azure.com/foodtruckinc/Wonder/_packaging/maven-local/maven/v1"
+val publishMavenAccessToken: String? = project.findProperty("mavenAccessToken")?.toString() ?: System.getenv("MAVEN_ACCESS_TOKEN")
 
 publishConf.modules.forEach { module ->
     project(module.name) {

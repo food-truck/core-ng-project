@@ -5,7 +5,7 @@ plugins {
 
 apply(plugin = "project")
 apply(plugin = "publish")
-apply(plugin = "project")
+apply(plugin = "azure-maven")
 
 subprojects {
     group = "core.framework"
@@ -28,9 +28,7 @@ val junitVersion = "5.10.2"
 val mockitoVersion = "5.10.0"
 val assertjVersion = "3.25.3"
 
-configure(subprojects.filter {
-    listOf("core-ng-api", "core-ng-json", "core-ng-common").contains(it.name)
-}) {
+configure(listOf(project("core-ng-api"), project("core-ng-json"), project("core-ng-common"))) {
     java {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
