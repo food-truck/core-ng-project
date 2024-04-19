@@ -1,4 +1,7 @@
 ## Change Log In Wonder
+### 3.0.0 (04/19/2024)
+* lcorresponds to upstream version **9.0.8**
+* ext/*: `es/kibana` use core-ng's auth
 
 ### 2.0.2 (07/18/2023)
 * Vulnerabilities: upgrade dependency `org.xerial.snappy:snappy-java` to 1.1.10.2
