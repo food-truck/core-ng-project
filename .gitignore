@@ -1,6 +1,9 @@
 .idea/
 /.gradle/
-/build/
+**/build/
+buildSrc/.gradle/
+buildSrc/build/
+buildSrc/out/
 *.iml
 /classes/
 **/src/dev/java/

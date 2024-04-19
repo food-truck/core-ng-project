@@ -1,9 +1,12 @@
 package core.framework.module;
 
+import core.framework.db.CloudAuthProvider;
 import core.framework.db.Database;
 import core.framework.db.IsolationLevel;
 import core.framework.db.Repository;
 import core.framework.internal.db.DatabaseImpl;
+import core.framework.internal.db.cloud.AzureAuthProvider;
+import core.framework.internal.db.cloud.GCloudAuthProvider;
 import core.framework.internal.module.Config;
 import core.framework.internal.module.ModuleContext;
 import core.framework.internal.module.ShutdownHook;
@@ -58,12 +61,25 @@ public class DBConfig extends Config {
     }
 
     public void user(String user) {
-        if ("iam/gcloud".equals(user)) {
-            database.authProvider("gcloud");
-            context.logManager.maskFields("access_token");  // mask token from IAM http response
+        if (user.startsWith("iam/")) {
+            CloudAuthProvider provider = CloudAuthProvider.Provider.get();
+            if (provider == null) {
+                provider = provider(user);
+                CloudAuthProvider.Provider.set(provider);
+            }
+            database.authProvider = provider;
+            context.logManager.maskFields("access_token");  // mask token from IAM http response, gcloud/azure all use JWT token
         } else {
             database.user = user;
         }
+    }
+
+    private CloudAuthProvider provider(String user) {
+        return switch (user) {
+            case "iam/gcloud" -> new GCloudAuthProvider();
+            case "iam/azure" -> new AzureAuthProvider();
+            case null, default -> throw new Error("unsupported cloud provider, value=" + user);
+        };
     }
 
     public void password(String password) {

@@ -4,6 +4,7 @@ import core.framework.test.module.TestModuleContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -29,9 +30,8 @@ class SearchConfigTest {
     }
 
     @Test
-    void checkProbe() {
-        config.host("localhost");
-        assertThatThrownBy(() -> config.checkProbe(true))
-            .hasMessageContaining("search checkProbe must be configured before search host");
+    void auth() {
+        config.auth("key", "secret");
+        assertThat(config.auth).isTrue();
     }
 }

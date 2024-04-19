@@ -39,22 +39,29 @@ class BeanFactoryTest {
     @Test
     void bindWithMismatchedType() {
         assertThatThrownBy(() -> beanFactory.bind(List.class, null, "instance"))
-                .isInstanceOf(Error.class)
-                .hasMessageContaining("instance type does not match");
+            .isInstanceOf(Error.class)
+            .hasMessageContaining("instance type does not match");
     }
 
     @Test
     void injectStaticMembers() {
         assertThatThrownBy(() -> beanFactory.create(BeanWithInjectStaticField.class))
-                .isInstanceOf(Error.class)
-                .hasMessageContaining("static field must not have @Inject");
+            .isInstanceOf(Error.class)
+            .hasMessageContaining("static field must not have @Inject");
     }
 
     @Test
     void bindGeneric() {
-        beanFactory.bind(Types.list(String.class), null, new ArrayList<String>());
+        beanFactory.bind(Types.list(String.class), null, new ArrayList<>());
 
         beanFactory.bind(Types.supplier(String.class), null, (Supplier<String>) () -> null);
+    }
+
+    @Test
+    void createWithInvalidDependency() {
+        assertThatThrownBy(() -> beanFactory.create(BeanWithInvalidDependency.class))
+            .isInstanceOf(Error.class)
+            .hasMessageContaining("can not resolve dependency");
     }
 
     static class Dependency1 {
@@ -75,5 +82,10 @@ class BeanFactoryTest {
         @SuppressWarnings("PMD.MutableStaticState")     // for invalid case
         @Inject
         static Dependency1 dependency1;
+    }
+
+    public static class BeanWithInvalidDependency {
+        @Inject
+        Dependency1 invalidDependency;
     }
 }

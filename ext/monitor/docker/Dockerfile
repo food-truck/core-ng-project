@@ -1,4 +1,4 @@
-FROM        wonderd/jre-alpine:17
+FROM        wonder/jdk:21-alpine
 LABEL       app=monitor
 RUN         addgroup --gid 1000 --system app && adduser --system --no-create-home --ingroup app --uid 1000 app
 USER        1000

@@ -52,10 +52,10 @@ public class TestModule extends AbstractTestModule {
         bind(new TestBean(requiredProperty("test.inject-test.property")));
 
         configureJob();
-        configureExecutor();
 
         highCPUUsageThreshold(0.8);
         highHeapUsageThreshold(0.8);
+        highMemUsageThreshold(0.8);
 
         onShutdown(() -> {
         });
@@ -72,11 +72,6 @@ public class TestModule extends AbstractTestModule {
         cache().redis("localhost", "password");
         cache().maxLocalSize(5000);
         cache().add(TestDBEntity.class, Duration.ofHours(6));
-    }
-
-    private void configureExecutor() {
-        executor().add();
-        executor().add("name", 1);
     }
 
     private void configureSite() {
@@ -105,7 +100,7 @@ public class TestModule extends AbstractTestModule {
         kafka().uri("localhost:9092");
         kafka().maxRequestSize(2 * 1024 * 1024);
         kafka().longConsumerDelayThreshold(Duration.ofSeconds(60));
-        kafka().poolSize(1);
+        kafka().concurrency(1);
         kafka().groupId("test");
         kafka().publish("topic", TestMessage.class);
         kafka().subscribe("topic1", TestMessage.class, (List<Message<TestMessage>> messages) -> {
@@ -118,6 +113,7 @@ public class TestModule extends AbstractTestModule {
         db().url("jdbc:mysql://localhost:3306/test");
         db().isolationLevel(IsolationLevel.READ_UNCOMMITTED);
         db().timeout(Duration.ofSeconds(10));
+        db().poolSize(5, 5);
         db().longTransactionThreshold(Duration.ofSeconds(5));
         db().repository(TestDBEntity.class);
         db().repository(TestDBEntityWithJSON.class);

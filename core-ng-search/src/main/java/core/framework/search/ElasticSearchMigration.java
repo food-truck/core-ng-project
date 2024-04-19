@@ -17,22 +17,24 @@ import java.util.function.Consumer;
 public class ElasticSearchMigration {
     private final Logger logger = LoggerFactory.getLogger(ElasticSearchMigration.class);
     private final HttpHost[] hosts;
-    private String apiKey;
+    private final String apiKeyId;
+    private final String apiKeySecret;
 
     public ElasticSearchMigration(String propertyFileClasspath) {
         var properties = new PropertyManager();
         properties.properties.load(propertyFileClasspath);
-        String host = properties.property("sys.elasticsearch.host").orElseThrow();
+        var host = properties.property("sys.elasticsearch.host").orElseThrow();
         hosts = ElasticSearchHost.parse(host);
-        properties.property("sys.elasticsearch.apiKey").ifPresent(apiKey -> this.apiKey = apiKey);
+        apiKeyId = properties.property("sys.elasticsearch.apiKeyId").orElse(null);
+        apiKeySecret = properties.property("sys.elasticsearch.apiKeySecret").orElse(null);
     }
 
     public void migrate(Consumer<ElasticSearch> consumer) {
         var search = new ElasticSearchImpl();
         try {
             search.hosts = hosts;
-            if (!Strings.isBlank(apiKey)) {
-                search.apiKey = apiKey;
+            if (!Strings.isBlank(apiKeyId)) {
+                search.auth(apiKeyId, apiKeySecret);
             }
             search.initialize();
             consumer.accept(search);

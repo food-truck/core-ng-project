@@ -9,9 +9,15 @@ core-ng is a webapp framework forked from [Neo's open source project](https://gi
 ```
 repositories {
     maven {
-        url 'https://neowu.github.io/maven-repo/'
+        url = uri("https://neowu.github.io/maven-repo/")
         content {
-            includeGroupByRegex 'core\\.framework.*'
+            includeGroupByRegex("core\\.framework.*")
+        }
+    }
+    maven {
+        url = uri("https://maven.codelibs.org/")
+        content {
+            includeGroup("org.codelibs.elasticsearch.module")
         }
     }
 }

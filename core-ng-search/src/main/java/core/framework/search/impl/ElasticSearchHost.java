@@ -9,33 +9,31 @@ import org.apache.http.HttpHost;
 public final class ElasticSearchHost {
     public static HttpHost[] parse(String host) {
         String[] values = Strings.split(host, ',');
-        HttpHost[] hosts = new HttpHost[values.length];
+        var hosts = new HttpHost[values.length];
         for (int i = 0; i < values.length; i++) {
             String value = values[i].strip();
-            hosts[i] = parseHostString(value);
+            hosts[i] = host(value);
         }
         return hosts;
     }
 
-    // modified from HttpHost.create()
-    private static HttpHost parseHostString(String host) {
-        String text = host;
-        String scheme = "http";
+    private static HttpHost host(String value) {
+        int hostStart = 0;
+        int hostEnd = value.length();
+        String schema = "http";
+        int schemaIndex = value.indexOf("://");
+        if (schemaIndex > 0) {
+            if (schemaIndex == value.length() - 3) throw new Error("invalid elasticsearch host, host=" + value);
+            schema = value.substring(0, schemaIndex);
+            hostStart = schemaIndex + 3;
+        }
+        int portIndex = value.indexOf(':', schemaIndex + 1);
         int port = 9200;
-        final int schemeIdx = text.indexOf("://");
-        if (schemeIdx > 0) {
-            scheme = text.substring(0, schemeIdx);
-            text = text.substring(schemeIdx + 3);
+        if (portIndex > 0) {
+            if (portIndex == value.length() - 1) throw new Error("invalid elasticsearch host, host=" + value);
+            port = Integer.parseInt(value.substring(portIndex + 1));
+            hostEnd = portIndex;
         }
-        final int portIdx = text.lastIndexOf(':');
-        if (portIdx > 0) {
-            try {
-                port = Integer.parseInt(text.substring(portIdx + 1));
-            } catch (final NumberFormatException ex) {
-                throw new Error("invalid search host, host= " + host, ex);
-            }
-            text = text.substring(0, portIdx);
-        }
-        return new HttpHost(text, port, scheme);
+        return new HttpHost(value.substring(hostStart, hostEnd), port, schema);
     }
 }

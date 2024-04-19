@@ -16,10 +16,10 @@ import java.time.Duration;
  */
 public class SearchConfig extends Config {
     ElasticSearchImpl search;
+    boolean auth;
     private ModuleContext context;
     private String name;
     private boolean typeAdded;
-    private boolean checkProbe = true;
 
     @Override
     protected void initialize(ModuleContext context, String name) {
@@ -38,19 +38,19 @@ public class SearchConfig extends Config {
         if (search.hosts == null) throw new Error("search host must be configured, name=" + name);
         if (!typeAdded)
             throw new Error("search is configured but no type added, please remove unnecessary config, name=" + name);
+        if (!auth) { // skip probe if auth has been configured, most likely it isn't deployed in kube env
+            context.probe.urls.add(search.hosts[0].toURI() + "/_cluster/health?local=true");      // in kube env, it's ok to just check first pod of stateful set
+        }
     }
 
-    // comma separated hosts
+    // comma separated uris
     public void host(String host) {
         search.hosts = ElasticSearchHost.parse(host);
-        if (checkProbe)
-            context.probe.urls.add(search.hosts[0].toURI() + "/_cluster/health?local=true");      // in kube env, it's ok to just check first pod of stateful set
     }
 
-    public void auth(String apiKey) {
-        if (apiKey.isEmpty()) throw new Error("search auth is configured but apiKey is empty");
-        search.apiKey = apiKey;
-        context.probe.defaultHeaders.put("Authorization", "ApiKey " + apiKey);
+    public void auth(String apiKeyId, String apiKeySecret) {
+        search.auth(apiKeyId, apiKeySecret);
+        auth = true;
     }
 
     // refer to https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html#index-max-result-window
@@ -68,12 +68,5 @@ public class SearchConfig extends Config {
         context.beanFactory.bind(Types.generic(ElasticSearchType.class, documentClass), name, searchType);
         typeAdded = true;
         return searchType;
-    }
-
-    public void checkProbe(boolean checkProbe) {
-        if (search.hosts != null) {
-            throw new Error("search checkProbe must be configured before search host, name=" + name);
-        }
-        this.checkProbe = checkProbe;
     }
 }

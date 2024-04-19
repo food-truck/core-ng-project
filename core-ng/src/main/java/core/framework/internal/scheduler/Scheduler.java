@@ -1,6 +1,7 @@
 package core.framework.internal.scheduler;
 
 import core.framework.internal.async.ThreadPools;
+import core.framework.internal.async.VirtualThread;
 import core.framework.internal.log.ActionLog;
 import core.framework.internal.log.LogManager;
 import core.framework.internal.log.Trace;
@@ -39,7 +40,7 @@ public final class Scheduler {
     public Clock clock = Clock.systemUTC();
 
     public Scheduler(LogManager logManager) {
-        this(logManager, ThreadPools.singleThreadScheduler("scheduler-"), ThreadPools.cachedThreadPool("scheduler-job-"));
+        this(logManager, ThreadPools.singleThreadScheduler("scheduler-"), ThreadPools.virtualThreadExecutor("scheduler-job-"));
     }
 
     Scheduler(LogManager logManager, ScheduledExecutorService scheduler, ExecutorService jobExecutor) {
@@ -53,13 +54,13 @@ public final class Scheduler {
         for (var entry : tasks.entrySet()) {
             String name = entry.getKey();
             Task task = entry.getValue();
-            if (task instanceof FixedRateTask) {
-                schedule((FixedRateTask) task);
+            if (task instanceof final FixedRateTask fixedRateTask) {
+                schedule(fixedRateTask);
                 logger.info("schedule job, job={}, trigger={}, jobClass={}", name, task.trigger(), task.job().getClass().getCanonicalName());
-            } else if (task instanceof TriggerTask) {
+            } else if (task instanceof TriggerTask triggerTask) {
                 try {
-                    ZonedDateTime next = next(((TriggerTask) task).trigger, now);
-                    schedule((TriggerTask) task, next);
+                    ZonedDateTime next = next(triggerTask.trigger, now);
+                    schedule(triggerTask, next);
                     logger.info("schedule job, job={}, trigger={}, jobClass={}, next={}", name, task.trigger(), task.job().getClass().getCanonicalName(), next);
                 } catch (Throwable e) {
                     logger.error("failed to schedule job, job={}", name, e);  // next() with custom trigger impl may throw exception, we don't let runtime error fail startup
@@ -143,8 +144,9 @@ public final class Scheduler {
 
     private void submitJob(Task task, ZonedDateTime scheduledTime, @Nullable String triggerActionId) {
         jobExecutor.submit(() -> {
+            VirtualThread.COUNT.increase();
+            ActionLog actionLog = logManager.begin("=== job execution begin ===", null);
             try {
-                ActionLog actionLog = logManager.begin("=== job execution begin ===", null);
                 String name = task.name();
                 actionLog.action("job:" + name);
                 if (triggerActionId != null) {  // triggered by scheduler controller
@@ -165,6 +167,7 @@ public final class Scheduler {
                 throw e;
             } finally {
                 logManager.end("=== job execution end ===");
+                VirtualThread.COUNT.decrease();
             }
         });
     }

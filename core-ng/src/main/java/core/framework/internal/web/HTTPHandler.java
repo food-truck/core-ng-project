@@ -1,5 +1,7 @@
 package core.framework.internal.web;
 
+import core.framework.internal.async.ThreadPools;
+import core.framework.internal.async.VirtualThread;
 import core.framework.internal.log.ActionLog;
 import core.framework.internal.log.LogManager;
 import core.framework.internal.log.Trace;
@@ -24,12 +26,15 @@ import core.framework.web.Response;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.util.HeaderMap;
+import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Semaphore;
 
 /**
  * @author neo
@@ -50,11 +55,13 @@ public class HTTPHandler implements HttpHandler {
     public final ResponseBeanWriter responseBeanWriter = new ResponseBeanWriter();
 
     public final RateControl rateControl = new RateControl();
+    final ExecutorService worker = ThreadPools.virtualThreadExecutor("http-handler-");
 
     private final Logger logger = LoggerFactory.getLogger(HTTPHandler.class);
     private final LogManager logManager;
     private final SessionManager sessionManager;
     private final ResponseHandler responseHandler;
+    private final Semaphore semaphore = new Semaphore(Runtime.getRuntime().availableProcessors() * 32);
 
     public Interceptor[] interceptors;
     public WebSocketHandler webSocketHandler;
@@ -71,7 +78,7 @@ public class HTTPHandler implements HttpHandler {
     @Override
     public void handleRequest(HttpServerExchange exchange) {
         if (exchange.isInIoThread()) {
-            exchange.dispatch(this);  // in io handler form parser will dispatch to current io thread
+            exchange.dispatch(worker, this);  // in io handler form parser will dispatch to current io thread
             return;
         }
 
@@ -79,6 +86,8 @@ public class HTTPHandler implements HttpHandler {
     }
 
     private void handle(HttpServerExchange exchange) {
+        semaphore.acquireUninterruptibly();
+        VirtualThread.COUNT.increase();
         long httpDelay = System.nanoTime() - exchange.getRequestStartTime();
         ActionLog actionLog = logManager.begin("=== http transaction begin ===", null);
         var request = new RequestImpl(exchange, requestBeanReader);
@@ -112,6 +121,7 @@ public class HTTPHandler implements HttpHandler {
             Response response = new InvocationImpl(controller, interceptors, request, webContext).proceed();
             webContext.handleResponse(response);
 
+            addKeepAliveHeader(exchange);
             responseHandler.render(request, (ResponseImpl) response, exchange, actionLog);
         } catch (Throwable e) {
             logManager.logError(e);
@@ -121,23 +131,32 @@ public class HTTPHandler implements HttpHandler {
             // sender.send() will write response until can't write more, then call channel.resumeWrites(), which will resume after this finally block finished, so this can be small delay
             webContext.cleanup();
             logManager.end("=== http transaction end ===");
+            VirtualThread.COUNT.decrease();
+            semaphore.release();
+        }
+    }
+
+    void addKeepAliveHeader(HttpServerExchange exchange) {
+        String keepAlive = Headers.KEEP_ALIVE.toString();
+        if (keepAlive.equals(exchange.getRequestHeaders().getFirst(Headers.CONNECTION))) {
+            exchange.getResponseHeaders().put(Headers.CONNECTION, keepAlive);
         }
     }
 
     void linkContext(ActionLog actionLog, HeaderMap headers) {
-        String client = headers.getFirst(HTTPHandler.HEADER_CLIENT);
+        String client = headers.getFirst(HEADER_CLIENT);
         if (client != null) actionLog.clients = List.of(client);
 
-        String refId = headers.getFirst(HTTPHandler.HEADER_REF_ID);
+        String refId = headers.getFirst(HEADER_REF_ID);
         if (refId != null) actionLog.refIds = List.of(refId);
 
-        String correlationId = headers.getFirst(HTTPHandler.HEADER_CORRELATION_ID);
+        String correlationId = headers.getFirst(HEADER_CORRELATION_ID);
         if (correlationId != null) actionLog.correlationIds = List.of(correlationId);
 
         String trace = headers.getFirst(HEADER_TRACE);
         if (trace != null) actionLog.trace = Trace.parse(trace);
 
-        actionLog.warningContext.maxProcessTimeInNano(maxProcessTime(headers.getFirst(HTTPHandler.HEADER_TIMEOUT)));
+        actionLog.warningContext.maxProcessTimeInNano(maxProcessTime(headers.getFirst(HEADER_TIMEOUT)));
     }
 
     long maxProcessTime(String timeout) {
