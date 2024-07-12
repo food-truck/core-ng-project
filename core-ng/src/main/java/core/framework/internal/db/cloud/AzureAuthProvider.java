@@ -34,14 +34,16 @@ public class AzureAuthProvider implements CloudAuthProvider {
         .maxRetries(3)
         .retryWaitTime(Duration.ofMillis(50))
         .build();
+    private final String user;
     String accessToken;
     long expirationTime;
-    String user;
+
+    public AzureAuthProvider(String user) {
+        this.user = user;
+    }
 
     @Override
     public String user() {
-        if (user == null)
-            user = clientId();
         return user;
     }
 
@@ -69,23 +71,25 @@ public class AzureAuthProvider implements CloudAuthProvider {
         return response.text();
     }
 
-    private HTTPRequest exchangeRequest() {
-        String azureAuthorityHost = System.getenv(AZURE_AUTHORITY_HOST);
-        String identityTenantId = System.getenv(AZURE_TENANT_ID);
-        String azureAuthorityURL = Strings.format("{}{}/oauth2/v2.0/token", azureAuthorityHost, identityTenantId);
+    HTTPRequest exchangeRequest() {
+        String azureAuthorityHost = env(AZURE_AUTHORITY_HOST);
+        String azureClientId = env(AZURE_CLIENT_ID);
+        String azureTenantId = env(AZURE_TENANT_ID);
+        String azureAuthorityURL = Strings.format("{}{}/oauth2/v2.0/token", azureAuthorityHost, azureTenantId);
+        String azureFederatedTokenFilePath = env(AZURE_FEDERATED_TOKEN_FILE);
 
         String scope = OSS_RDBMS_SCOPE_MAP.get(azureAuthorityHost);
-        String federatedToken = Files.text(Path.of(System.getenv(AZURE_FEDERATED_TOKEN_FILE)));
-        Map<String, String> formData = new LinkedHashMap<>();
-        formData.put("client_assertion", federatedToken);
-        formData.put("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
-        formData.put("client_id", user());
-        formData.put("grant_type", "client_credentials");
-        formData.put("scope", scope);
+        String federatedToken = azureFederatedToken(azureFederatedTokenFilePath);
+        Map<String, String> form = new LinkedHashMap<>();
+        form.put("client_assertion", federatedToken);
+        form.put("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
+        form.put("client_id", azureClientId);
+        form.put("grant_type", "client_credentials");
+        form.put("scope", scope);
 
-        HTTPRequest httpRequest = new HTTPRequest(HTTPMethod.POST, azureAuthorityURL);
-        httpRequest.form(formData);
-        return httpRequest;
+        var request = new HTTPRequest(HTTPMethod.POST, azureAuthorityURL);
+        request.form(form);
+        return request;
     }
 
     private String parseAccessToken(String tokenJSON) {
@@ -100,7 +104,11 @@ public class AzureAuthProvider implements CloudAuthProvider {
         return Integer.parseInt(tokenJSON.substring(startIndex, endIndex));
     }
 
-    String clientId() {
-        return System.getenv(AZURE_CLIENT_ID);
+    String env(String name) {
+        return System.getenv(name);
+    }
+
+    String azureFederatedToken(String azureFederatedTokenFilePath) {
+        return Files.text(Path.of(azureFederatedTokenFilePath));
     }
 }
