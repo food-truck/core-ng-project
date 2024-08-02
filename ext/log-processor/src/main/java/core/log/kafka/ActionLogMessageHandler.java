@@ -12,6 +12,7 @@ import core.log.domain.ActionDocument;
 import core.log.domain.TraceDocument;
 import core.log.service.ActionLogForwarder;
 import core.log.service.IndexService;
+import core.log.service.NetworkErrorRetryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +41,8 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     ElasticSearchType<ActionDocument> actionType;
     @Inject
     ElasticSearchType<TraceDocument> traceType;
+    @Inject
+    NetworkErrorRetryService networkErrorRetryService;
 
     public ActionLogMessageHandler(@Nullable ActionLogForwarder forwarder, LogIndexRouter actionLogIndexRouter, LogIndexRouter traceLogIndexRouter) {
         this.forwarder = forwarder;
@@ -75,10 +78,10 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
             .collect(Collectors.groupingBy(entry -> Objects.requireNonNullElse(entry.getValue().app, "")))
             .forEach((app, appActions) -> {
                 try {
-                    BulkIndexRequest<ActionDocument> request = new BulkIndexRequest<>();
+                    var request = new BulkIndexRequest<ActionDocument>();
                     request.index = indexService.indexName(actionLogIndexRouter.route(app), now);
                     request.sources = appActions.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                    actionType.bulkIndex(request);
+                    networkErrorRetryService.run(() -> actionType.bulkIndex(request));
                 } catch (Exception e) {
                     LOGGER.error("failure indexActions! errorMsg: " + e.getMessage(), e);
                 }

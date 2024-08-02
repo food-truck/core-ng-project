@@ -10,6 +10,7 @@ import core.framework.util.Maps;
 import core.log.domain.EventDocument;
 import core.log.service.EventForwarder;
 import core.log.service.IndexService;
+import core.log.service.NetworkErrorRetryService;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -25,6 +26,8 @@ public class EventMessageHandler implements BulkMessageHandler<EventMessage> {
     IndexService indexService;
     @Inject
     ElasticSearchType<EventDocument> eventType;
+    @Inject
+    NetworkErrorRetryService networkErrorRetryService;
 
     public EventMessageHandler(EventForwarder forwarder) {
         this.forwarder = forwarder;
@@ -45,7 +48,7 @@ public class EventMessageHandler implements BulkMessageHandler<EventMessage> {
         BulkIndexRequest<EventDocument> request = new BulkIndexRequest<>();
         request.index = indexService.indexName("event", now);
         request.sources = events;
-        eventType.bulkIndex(request);
+        networkErrorRetryService.run(() -> eventType.bulkIndex(request));
     }
 
     private EventDocument event(EventMessage message) {
