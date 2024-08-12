@@ -1,8 +1,10 @@
 package core.log.kafka;
 
+import core.framework.async.Executor;
 import core.framework.inject.Inject;
 import core.framework.kafka.BulkMessageHandler;
 import core.framework.kafka.Message;
+import core.framework.log.ActionLogContext;
 import core.framework.log.message.ActionLogMessage;
 import core.framework.search.BulkIndexRequest;
 import core.framework.search.ElasticSearchType;
@@ -21,6 +23,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 
 /**
@@ -43,6 +46,8 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     ElasticSearchType<TraceDocument> traceType;
     @Inject
     NetworkErrorRetryService networkErrorRetryService;
+    @Inject
+    Executor executor;
 
     public ActionLogMessageHandler(@Nullable ActionLogForwarder forwarder, LogIndexRouter actionLogIndexRouter, LogIndexRouter traceLogIndexRouter) {
         this.forwarder = forwarder;
@@ -52,6 +57,7 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
 
     @Override
     public void handle(List<Message<ActionLogMessage>> messages) {
+        ActionLogContext.put("records", messages.size());
         index(messages, LocalDate.now());
 
         if (forwarder != null) forwarder.forward(messages);
@@ -74,18 +80,29 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     }
 
     private void indexActions(Map<String, ActionDocument> actions, LocalDate now) {
-        actions.entrySet().stream()
-            .collect(Collectors.groupingBy(entry -> Objects.requireNonNullElse(entry.getValue().app, "")))
-            .forEach((app, appActions) -> {
-                try {
-                    var request = new BulkIndexRequest<ActionDocument>();
-                    request.index = indexService.indexName(actionLogIndexRouter.route(app), now);
-                    request.sources = appActions.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                    networkErrorRetryService.run(() -> actionType.bulkIndex(request));
-                } catch (Exception e) {
-                    LOGGER.error("failure indexActions! errorMsg: " + e.getMessage(), e);
-                }
-            });
+        var indexActionMap = actions.entrySet().stream().collect(Collectors.groupingBy(entry ->
+            indexService.indexName(actionLogIndexRouter.route(Objects.requireNonNullElse(entry.getValue().app, "")), now)));
+        if (indexActionMap.isEmpty()) {
+            return;
+        }
+        var countDownLatch = new CountDownLatch(indexActionMap.size());
+        indexActionMap.forEach((index, indexActions) -> executor.submit("write_action_log", () -> {
+            try {
+                var request = new BulkIndexRequest<ActionDocument>();
+                request.index = index;
+                request.sources = indexActions.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                networkErrorRetryService.run(() -> actionType.bulkIndex(request));
+            } catch (Exception e) {
+                LOGGER.error("failure indexActions! errorMsg: " + e.getMessage(), e);
+            } finally {
+                countDownLatch.countDown();
+            }
+        }));
+        try {
+            countDownLatch.await();
+        } catch (InterruptedException e) {
+            LOGGER.error(e.getMessage(), e);
+        }
     }
 
     private void indexTraces(Map<String, TraceDocument> traces, LocalDate now) {
