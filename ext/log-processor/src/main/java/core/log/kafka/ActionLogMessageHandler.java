@@ -1,5 +1,6 @@
 package core.log.kafka;
 
+import core.framework.async.Executor;
 import core.framework.inject.Inject;
 import core.framework.kafka.BulkMessageHandler;
 import core.framework.kafka.Message;
@@ -12,6 +13,7 @@ import core.log.domain.ActionDocument;
 import core.log.domain.TraceDocument;
 import core.log.service.ActionLogForwarder;
 import core.log.service.IndexService;
+import core.log.service.NetworkErrorRetryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +22,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
 /**
@@ -33,6 +36,7 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     private final LogIndexRouter actionLogIndexRouter;
 
     private final LogIndexRouter traceLogIndexRouter;
+    private final Semaphore semaphore = new Semaphore(10);
 
     @Inject
     IndexService indexService;
@@ -40,6 +44,10 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     ElasticSearchType<ActionDocument> actionType;
     @Inject
     ElasticSearchType<TraceDocument> traceType;
+    @Inject
+    NetworkErrorRetryService networkErrorRetryService;
+    @Inject
+    Executor executor;
 
     public ActionLogMessageHandler(@Nullable ActionLogForwarder forwarder, LogIndexRouter actionLogIndexRouter, LogIndexRouter traceLogIndexRouter) {
         this.forwarder = forwarder;
@@ -71,18 +79,28 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     }
 
     private void indexActions(Map<String, ActionDocument> actions, LocalDate now) {
-        actions.entrySet().stream()
-            .collect(Collectors.groupingBy(entry -> Objects.requireNonNullElse(entry.getValue().app, "")))
-            .forEach((app, appActions) -> {
+        var indexActionMap = actions.entrySet().stream().collect(Collectors.groupingBy(entry ->
+            indexService.indexName(actionLogIndexRouter.route(Objects.requireNonNullElse(entry.getValue().app, "")), now)));
+        indexActionMap.forEach((index, indexActions) -> {
+            try {
+                semaphore.acquire();
+            } catch (InterruptedException e) {
+                LOGGER.error("acquire failure!", e);
+                throw new RuntimeException(e);
+            }
+            executor.submit("write_action_log", () -> {
                 try {
-                    BulkIndexRequest<ActionDocument> request = new BulkIndexRequest<>();
-                    request.index = indexService.indexName(actionLogIndexRouter.route(app), now);
-                    request.sources = appActions.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                    actionType.bulkIndex(request);
+                    var request = new BulkIndexRequest<ActionDocument>();
+                    request.index = index;
+                    request.sources = indexActions.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    networkErrorRetryService.run(() -> actionType.bulkIndex(request));
                 } catch (Exception e) {
                     LOGGER.error("failure indexActions! errorMsg: " + e.getMessage(), e);
+                } finally {
+                    semaphore.release();
                 }
             });
+        });
     }
 
     private void indexTraces(Map<String, TraceDocument> traces, LocalDate now) {

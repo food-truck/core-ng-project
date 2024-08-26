@@ -2,7 +2,7 @@
 
 PROJECT="log-processor"
 IMAGE_NAME="core-ng-project/${PROJECT}"
-VERSION="3.0.0"
+VERSION="3.0.2"
 
 ../gradlew -p ${PROJECT} check docker
 

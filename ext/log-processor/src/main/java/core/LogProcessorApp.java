@@ -29,6 +29,7 @@ import core.log.service.AppGroupMappingLogIndexRouter;
 import core.log.service.ActionLogForwarder;
 import core.log.service.EventForwarder;
 import core.log.service.JobConfig;
+import core.log.service.NetworkErrorRetryService;
 
 import java.time.Duration;
 import java.time.LocalTime;
@@ -53,6 +54,8 @@ public class LogProcessorApp extends App {
         configureKibanaService();
 
         Forwarders forwarders = configureLogForwarders();
+        var maxRetry = property("app.index.maxRetry").map(Integer::parseInt).orElse(1);
+        bind(NetworkErrorRetryService.class, new NetworkErrorRetryService(maxRetry));
         configureKafka(forwarders);
         configureJob();
         configureLogAppender();
@@ -92,9 +95,9 @@ public class LogProcessorApp extends App {
 
     private void configureKafka(Forwarders forwarders) {
         kafka().uri(requiredProperty("sys.kafka.uri"));
-        kafka().concurrency(2);
+        kafka().concurrency(3);
         kafka().minPoll(1024 * 1024, Duration.ofMillis(500));           // try to get at least 1M message
-        kafka().maxPoll(2000, 3 * 1024 * 1024);     // get 3M message at max
+        kafka().maxPoll(20000, 30 * 1024 * 1024);     // get 30M message at max
 
         var actionLogMessageHandler = new ActionLogMessageHandler(forwarders.action, property("app.log.group.mapping")
             .<LogIndexRouter>map(config -> new AppGroupMappingLogIndexRouter("action", config))

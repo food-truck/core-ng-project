@@ -9,6 +9,7 @@ import core.framework.search.ElasticSearchType;
 import core.framework.util.Maps;
 import core.log.domain.StatDocument;
 import core.log.service.IndexService;
+import core.log.service.NetworkErrorRetryService;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -22,6 +23,8 @@ public class StatMessageHandler implements BulkMessageHandler<StatMessage> {
     IndexService indexService;
     @Inject
     ElasticSearchType<StatDocument> statType;
+    @Inject
+    NetworkErrorRetryService networkErrorRetryService;
 
     @Override
     public void handle(List<Message<StatMessage>> messages) {
@@ -36,7 +39,7 @@ public class StatMessageHandler implements BulkMessageHandler<StatMessage> {
         BulkIndexRequest<StatDocument> request = new BulkIndexRequest<>();
         request.index = indexService.indexName("stat", now);
         request.sources = stats;
-        statType.bulkIndex(request);
+        networkErrorRetryService.run(() -> statType.bulkIndex(request));
     }
 
     private StatDocument stat(StatMessage message) {

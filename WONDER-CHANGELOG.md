@@ -1,4 +1,13 @@
 ## Change Log In Wonder
+### 3.0.2 (22/08/2024)
+* ext/log-processor
+  * kafka().maxPoll(): maxRecords 2000 -> 20000; maxBytes 3MB -> 30MB
+  * actionLog/event/stat: support retry when network error
+  * actionLog: optimize `app.log.group.mapping` logic improve to write log to es performance
+
+### 3.0.1 (07/12/2024)
+* db: AzureAuthProvider support azure IAM auth
+
 ### 3.0.0 (04/19/2024)
 * corresponds to upstream version **9.0.8**
 * ext/*: `es/kibana` use core-ng's auth
