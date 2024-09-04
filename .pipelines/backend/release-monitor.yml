@@ -1,0 +1,17 @@
+trigger:
+  batch: true
+  branches:
+    include:
+      - develop
+      - uat
+      - main
+  paths:
+    include:
+      - ext/monitor
+
+pr: none
+
+extends:
+  template: /.pipelines/template-backend-service-release.yml
+  parameters:
+    serviceName: monitor
