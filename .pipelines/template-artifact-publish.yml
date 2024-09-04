@@ -1,0 +1,35 @@
+resources:
+  repositories:
+    - repository: "templates"
+      type: "github"
+      name: "food-truck/pipeline-templates"
+      ref: "refs/heads/v5"
+      endpoint: "food-truck"
+
+parameters:
+  - name: module
+    type: string
+    default: ""
+
+  - name: stageName
+    type: string
+    default: ""
+
+variables:
+  - template: vars.base.yml
+  - template: /templates/vars.dev.yml@templates
+
+stages:
+  - stage: "${{ replace(replace(coalesce(parameters.stageName, format('publish-{0}', parameters.module)), '-', '_'), '/', '_') }}"
+    displayName: ${{ coalesce(parameters.stageName, format('Publish {0}', parameters.module)) }}
+    pool: ${{ variables.AgentPool }}
+    jobs:
+      - job: "${{ replace(parameters.module, '-', '_') }}"
+        displayName: "Publish ${{ parameters.module }}"
+        steps:
+          - template: templates/step-jdk-install.yml@templates
+            parameters:
+              jdkVersion: ${{ variables.JdkVersion }}
+          - template: templates/step-coreng-publish.yml@templates
+            parameters:
+              gradleModuleName: ${{ parameters.module }}

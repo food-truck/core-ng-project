@@ -1,0 +1,8 @@
+trigger: none
+
+pr: none
+
+extends:
+  template: /.pipelines/template-artifact-publish.yml
+  parameters:
+    module: core-ng-test

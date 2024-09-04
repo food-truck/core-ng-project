@@ -1,0 +1,15 @@
+variables:
+  JdkVersion: 21
+  Project: core-ng-project
+  # Dev
+  DevEnv: dev
+  DevBranch: develop
+  DevNamespace: ${{ variables.DevEnv }}
+  # UAT
+  UatEnv: uat
+  UatBranch: uat
+  UatNamespace: ${{ variables.UatEnv }}
+  # PROD
+  ProdEnv: prod
+  ProdBranch: main
+  ProdNamespace: ${{ variables.ProdEnv }}

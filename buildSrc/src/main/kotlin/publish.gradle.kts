@@ -23,7 +23,7 @@ var publishConf = json.decodeFromString<Publish>(rootProject.file("publish.json"
 val publishMavenURL =
     project.findProperty("mavenURL") ?: "https://pkgs.dev.azure.com/foodtruckinc/Wonder/_packaging/maven-local/maven/v1"
 val publishMavenAccessToken: String? =
-    project.findProperty("mavenAccessToken")?.toString() ?: System.getenv("MAVEN_ACCESS_TOKEN")
+    project.findProperty("mavenAccessToken")?.toString() ?: System.getenv("ARTIFACT_ACCESSTOKEN")
 
 publishConf.modules.forEach { module ->
     project(module.name) {
