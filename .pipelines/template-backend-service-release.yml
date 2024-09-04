@@ -1,0 +1,52 @@
+resources:
+  repositories:
+    - repository: "templates"
+      type: "github"
+      name: "food-truck/pipeline-templates"
+      ref: "refs/heads/v5"
+      endpoint: "food-truck"
+
+parameters:
+  - name: serviceName
+    type: string
+
+variables:
+  - template: vars.base.yml
+  - template: vars.backend.service.yml
+
+stages:
+  - template: templates/stage-service-release.yml@templates
+    parameters:
+      condition: in(variables['Build.SourceBranchName'], '${{ variables.DevBranch }}')
+      env: ${{ variables.DevEnv }}
+      jdkVersion: ${{ variables.JdkVersion }}
+      namespace: ${{ variables.DevNamespace }}
+      pool: ${{ variables.AgentPool }}
+      projectDir: ${{ variables.ProjectDir }}
+      serviceName: ${{ parameters.serviceName }}
+      variables:
+        - template: vars.dev.yml
+
+  - template: templates/stage-service-release.yml@templates
+    parameters:
+      condition: in(variables['Build.SourceBranchName'], '${{ variables.UatBranch }}')
+      env: ${{ variables.UatEnv }}
+      jdkVersion: ${{ variables.JdkVersion }}
+      namespace: ${{ variables.UatNamespace }}
+      pool: ${{ variables.AgentPool }}
+      projectDir: ${{ variables.ProjectDir }}
+      serviceName: ${{ parameters.serviceName }}
+      variables:
+        - template: vars.uat.yml
+
+  - template: templates/stage-service-release.yml@templates
+    parameters:
+      condition: in(variables['Build.SourceBranchName'], '${{ variables.ProdBranch }}')
+      env: ${{ variables.ProdEnv }}
+      jdkVersion: ${{ variables.JdkVersion }}
+      namespace: ${{ variables.ProdNamespace }}
+      pool: ${{ variables.AgentPool }}
+      projectDir: ${{ variables.ProjectDir }}
+      serviceName: ${{ parameters.serviceName }}
+      variables:
+        - template: vars.prod.yml

@@ -43,7 +43,7 @@
     {
       "name": "core-ng-test",
       "artifactId": "core-ng-test",
-      "version": "3.0.1"
+      "version": "0.0.1-SNAPSHOT"
     }
   ]
 }
