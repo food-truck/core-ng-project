@@ -8,7 +8,7 @@ if (azureFile.exists()) {
     azureProps.load(azureFile.inputStream())
 }
 val mavenAccessToken: String by project
-extra["mavenAccessToken"] = System.getenv("AZURE_PACKAGES_ACCESSTOKEN") ?: azureProps.getProperty("azure.packages.accessToken")
+extra["mavenAccessToken"] = System.getenv("ARTIFACT_ACCESSTOKEN") ?: azureProps.getProperty("azure.packages.accessToken")
 
 subprojects {
     repositories {
