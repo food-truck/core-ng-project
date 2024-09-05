@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
-import java.util.stream.Collectors;
 
 /**
  * @author neo
@@ -63,24 +62,25 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     }
 
     void index(List<Message<ActionLogMessage>> messages, LocalDate now) {
-        Map<String, ActionDocument> actions = Maps.newHashMapWithExpectedSize(messages.size());
+        var indexActionMap = Maps.<String, Map<String, ActionDocument>>newHashMap();
         Map<String, TraceDocument> traces = Maps.newHashMap();
         for (Message<ActionLogMessage> message : messages) {
             ActionLogMessage value = message.value;
-            actions.put(value.id, action(value));
+            var app = Objects.requireNonNullElse(value.app, "");
+            var index = indexService.indexName(actionLogIndexRouter.route(app), now);
+            var actionMap = indexActionMap.computeIfAbsent(index, ignore -> Maps.newHashMap());
+            actionMap.put(value.id, action(value));
             if (value.traceLog != null) {
                 traces.put(value.id, trace(value));
             }
         }
-        indexActions(actions, now);
+        indexActions(indexActionMap);
         if (!traces.isEmpty()) {
             indexTraces(traces, now);
         }
     }
 
-    private void indexActions(Map<String, ActionDocument> actions, LocalDate now) {
-        var indexActionMap = actions.entrySet().stream().collect(Collectors.groupingBy(entry ->
-            indexService.indexName(actionLogIndexRouter.route(Objects.requireNonNullElse(entry.getValue().app, "")), now)));
+    private void indexActions(Map<String, Map<String, ActionDocument>> indexActionMap) {
         indexActionMap.forEach((index, indexActions) -> {
             try {
                 semaphore.acquire();
@@ -92,7 +92,7 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
                 try {
                     var request = new BulkIndexRequest<ActionDocument>();
                     request.index = index;
-                    request.sources = indexActions.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    request.sources = indexActions;
                     networkErrorRetryService.run(() -> actionType.bulkIndex(request));
                 } catch (Exception e) {
                     LOGGER.error("failure indexActions! errorMsg: " + e.getMessage(), e);
