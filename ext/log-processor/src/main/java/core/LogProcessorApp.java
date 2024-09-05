@@ -97,7 +97,7 @@ public class LogProcessorApp extends App {
         kafka().uri(requiredProperty("sys.kafka.uri"));
         kafka().concurrency(3);
         kafka().minPoll(1024 * 1024, Duration.ofMillis(500));           // try to get at least 1M message
-        kafka().maxPoll(20000, 30 * 1024 * 1024);     // get 30M message at max
+        kafka().maxPoll(10000, 15 * 1024 * 1024);     // get 30M message at max
 
         var actionLogMessageHandler = new ActionLogMessageHandler(forwarders.action, property("app.log.group.mapping")
             .<LogIndexRouter>map(config -> new AppGroupMappingLogIndexRouter("action", config))
