@@ -7,6 +7,7 @@ project("log-processor") {
     dependencies {
         implementation(project(":core-ng"))
         implementation(project(":core-ng-search"))
+        implementation("com.github.spotbugs:spotbugs-annotations:4.8.3")
         testImplementation(project(":core-ng-test"))
         testImplementation(project(":core-ng-search-test"))
     }
