@@ -13,6 +13,7 @@ import core.framework.log.message.ActionLogMessage;
 import core.framework.search.BulkIndexRequest;
 import core.framework.search.ElasticSearchType;
 import core.framework.search.SearchException;
+import core.framework.util.Lists;
 import core.framework.util.Maps;
 import core.framework.util.StopWatch;
 import core.log.LogIndexRouter;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * @author neo
@@ -87,13 +89,45 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
     }
 
     private void indexActions(Map<String, ActionDocument> actions, LocalDate now) {
-        var watch = new StopWatch();
-        var operations = new ArrayList<BulkOperation>(actions.size());
+        var operationsList = Lists.<List<BulkOperation>>newArrayList();
         actions.forEach((id, action) -> {
             validator.validate(action, false);
+            List<BulkOperation> operations;
+            if (operationsList.isEmpty() || (operations = operationsList.getLast()).size() >= 1000) {
+                operations = Lists.newArrayList();
+                operationsList.add(operations);
+            }
             var index = indexService.indexName(actionLogIndexRouter.route(Objects.requireNonNullElse(action.app, "")), now);
             operations.add(BulkOperation.of(builder -> builder.index(i -> i.index(index).id(id).document(action))));
         });
+        var watch = new StopWatch();
+        if (operationsList.size() == 1) {
+            try {
+                index(operationsList.getFirst());
+            } finally {
+                ActionLogContext.track("elasticsearch", watch.elapsed(), 0, actions.size());
+            }
+        } else if (operationsList.size() > 1) {
+            var countDownLatch = new CountDownLatch(operationsList.size());
+            operationsList.forEach(operations -> Thread.ofVirtual().start(() -> {
+                try {
+                    index(operations);
+                } finally {
+                    countDownLatch.countDown();
+                }
+            }));
+            try {
+                countDownLatch.await();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            } finally {
+                ActionLogContext.track("elasticsearch", watch.elapsed(), 0, actions.size());
+            }
+        }
+    }
+
+    private void index(List<BulkOperation> operations) {
+        var watch = new StopWatch();
         long esTook = 0;
         try {
             var response = getElasticSearchClient().bulk(builder -> builder.operations(operations));
@@ -126,8 +160,7 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
             throw new SearchException(builder.toString(), e);
         } finally {
             long elapsed = watch.elapsed();
-            LOGGER.debug("bulkIndex, index=action, size={}, esTook={}, elapsed={}", actions.size(), esTook, elapsed);
-            ActionLogContext.track("elasticsearch", elapsed, 0, actions.size());
+            LOGGER.debug("bulkIndex, index=action, size={}, esTook={}, elapsed={}", operations.size(), esTook, elapsed);
         }
     }
 
