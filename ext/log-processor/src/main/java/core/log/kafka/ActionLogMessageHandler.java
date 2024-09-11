@@ -30,7 +30,6 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -88,12 +87,13 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
         }
     }
 
+    @SuppressWarnings("AssignmentInOperand")
     private void indexActions(Map<String, ActionDocument> actions, LocalDate now) {
         var operationsList = Lists.<List<BulkOperation>>newArrayList();
         actions.forEach((id, action) -> {
             validator.validate(action, false);
-            List<BulkOperation> operations;
-            if (operationsList.isEmpty() || (operations = operationsList.getLast()).size() >= 1000) {
+            List<BulkOperation> operations = operationsList.isEmpty() ? null : operationsList.getLast();
+            if (operations == null || operations.size() >= 1000) {
                 operations = Lists.newArrayList();
                 operationsList.add(operations);
             }
@@ -103,7 +103,7 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
         var watch = new StopWatch();
         if (operationsList.size() == 1) {
             try {
-                index(operationsList.getFirst());
+                indexOperations(operationsList.getFirst());
             } finally {
                 ActionLogContext.track("elasticsearch", watch.elapsed(), 0, actions.size());
             }
@@ -111,7 +111,7 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
             var countDownLatch = new CountDownLatch(operationsList.size());
             operationsList.forEach(operations -> Thread.ofVirtual().start(() -> {
                 try {
-                    index(operations);
+                    indexOperations(operations);
                 } finally {
                     countDownLatch.countDown();
                 }
@@ -126,7 +126,7 @@ public class ActionLogMessageHandler implements BulkMessageHandler<ActionLogMess
         }
     }
 
-    private void index(List<BulkOperation> operations) {
+    private void indexOperations(List<BulkOperation> operations) {
         var watch = new StopWatch();
         long esTook = 0;
         try {
