@@ -1,0 +1,51 @@
+# Version of the schema being used
+version: 1
+
+repo:
+  # Required: The friendly name of the repo
+  name: core-ng-project
+
+  # Required: [Courier, Growth, Restaurant, Platform, Supply Chain]
+  techteam: Platform
+
+  # Required: [Aggregator, BA Recipe Authoring, Consumer, Cooking Instruction, Central Kitchen, Customer Care, Data and Analytics, Delivery, Demand Forecasting, Global Inventory Management, HDR, HDR Inventory Management, Master Data, Order Dispatch, Network Level Planning, Platform, Relay, Relay Data, WMS, Wonder as a Service, Wonder Works, Other]
+  domain: Platform
+
+  # Required: The team alias that owns this repo
+  #   aggregator, architecture_and_dev, blue_apron_fulfillment, consumer, customer_care_stack, delivery, wonder_as_a_service, wonder_works
+  #   blue_Chef, blue_culinary_operations, hdr, kds, master_data, pantry, relay, relay_data
+  #   busboy, data_engineering, demand_forecast, kitchen_technology, wonder_platform_devOps
+  owner: Rickey Hong
+
+  # Optional
+  application: Most services in XM, and some services in NY
+
+  # Optional: The lifecycle the repo is currently in [concept, development, alpha, beta, generally_available, deprecated, retired]
+  # concept: The service is still in the idea or planning phase, with no active development yet.
+  # development: The service is actively being developed but not yet available for use.
+  # alpha: The service is in an early testing phase with limited functionality and likely to change frequently.
+  # beta: The service is more stable and feature-complete but still undergoing testing and refinement.
+  # generally_available: The service is fully developed, stable, and available for all users, often considered "production-ready."
+  # deprecated: The service is still available but is no longer actively developed or supported, and may be phased out in the future.
+  # retired: The service is no longer available or supported.
+  lifecycle: generally_available
+
+  # Optional: The tier of the repo (must provide a valid tier [critical, high, low])
+  # https://wonder.atlassian.net/wiki/spaces/Platform/pages/3430318136/Service+Tiers
+  #
+  tier: critical
+
+  # Optional: A detailed description of the repo
+  description: No services, framework(Critical)
+
+  # Optional: The core language this repo is written in
+  # Optional: The core framework used for this service
+  language: Java
+  framework:
+
+  # Optional: Key-value tags to provide additional metadata for this repo
+  #tags:
+  #  - key: db  # Required: Tag key
+  #    value: mysql  # Required: Tag value
+  #  - key: kafka-topic
+  #    value: cart-additions
