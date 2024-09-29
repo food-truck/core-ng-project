@@ -1,51 +1,41 @@
+# This file intends to align with Wonder's datadog.yaml schema (https://wonder.atlassian.net/wiki/spaces/Platform/pages/3441295398/Datadog+Software+Catalog+file)
+# and the Team Owners page (https://wonder.atlassian.net/wiki/spaces/T/pages/2618394120/Team+Owners).
+# If the team owners page is out of date, please update that page.
+
 # Version of the schema being used
 version: 1
 
-repo:
-  # Required: The friendly name of the repo
+metadata:
+  # Required. The unique name of your repo/system/service/component. Should be short and descriptive.
   name: core-ng-project
 
-  # Required: [Courier, Growth, Restaurant, Platform, Supply Chain]
-  techteam: Platform
+  # Optional. Human-readable name.
+  displayName: core-ng-project
 
-  # Required: [Aggregator, BA Recipe Authoring, Consumer, Cooking Instruction, Central Kitchen, Customer Care, Data and Analytics, Delivery, Demand Forecasting, Global Inventory Management, HDR, HDR Inventory Management, Master Data, Order Dispatch, Network Level Planning, Platform, Relay, Relay Data, WMS, Wonder as a Service, Wonder Works, Other]
-  domain: Platform
+  # Optional. A detailed description of the repo
+  description: Most services in XM, and some services in NY
 
-  # Required: The team alias that owns this repo
-  #   aggregator, architecture_and_dev, blue_apron_fulfillment, consumer, customer_care_stack, delivery, wonder_as_a_service, wonder_works
-  #   blue_Chef, blue_culinary_operations, hdr, kds, master_data, pantry, relay, relay_data
-  #   busboy, data_engineering, demand_forecast, kitchen_technology, wonder_platform_devOps
-  owner: Rickey Hong
+  # Required. The team (not individual) responsible for this system/service.
+  # Please align to the team column in the Team Owners page (https://wonder.atlassian.net/wiki/spaces/T/pages/2618394120/Team+Owners).
+  owner: Tech Platform
 
-  # Optional
-  application: Most services in XM, and some services in NY
+  # Optional. Additional owners, who may be individuals, of this entity.
+  # For type, please align to the Confluence team owners page such as "tech_lead", "tech_owner", "product_manager", "tpm"
+  additionalOwners:
+    - name: Miller Lin
+      type: tech_owner
+    - name: Ann Lin
+      type: tpm
 
-  # Optional: The lifecycle the repo is currently in [concept, development, alpha, beta, generally_available, deprecated, retired]
-  # concept: The service is still in the idea or planning phase, with no active development yet.
-  # development: The service is actively being developed but not yet available for use.
-  # alpha: The service is in an early testing phase with limited functionality and likely to change frequently.
-  # beta: The service is more stable and feature-complete but still undergoing testing and refinement.
-  # generally_available: The service is fully developed, stable, and available for all users, often considered "production-ready."
-  # deprecated: The service is still available but is no longer actively developed or supported, and may be phased out in the future.
-  # retired: The service is no longer available or supported.
-  lifecycle: generally_available
+  tags:
+    # Required. Please align with the vocabulary in the Team Owners page (https://wonder.atlassian.net/wiki/spaces/T/pages/2618394120/Team+Owners).
+    # [courier, growth, restaurant, platform, supply_chain]
+    - "pillar:growth"
 
-  # Optional: The tier of the repo (must provide a valid tier [critical, high, low])
-  # https://wonder.atlassian.net/wiki/spaces/Platform/pages/3430318136/Service+Tiers
-  #
-  tier: critical
+    # Optional. Please align with the applications listed in the Team Owners page (https://wonder.atlassian.net/wiki/spaces/T/pages/2618394120/Team+Owners).
+    # If the team owners page is out of date, please update that page.
+    - "application:"
 
-  # Optional: A detailed description of the repo
-  description: No services, framework(Critical)
-
-  # Optional: The core language this repo is written in
-  # Optional: The core framework used for this service
-  language: Java
-  framework:
-
-  # Optional: Key-value tags to provide additional metadata for this repo
-  #tags:
-  #  - key: db  # Required: Tag key
-  #    value: mysql  # Required: Tag value
-  #  - key: kafka-topic
-  #    value: cart-additions
+  # Optional. lifecycle values: [concept, alpha, beta, generally_available]
+  # see: https://wonder.atlassian.net/wiki/x/JgAezQ for explaination of values
+    - "lifecycle:generally_available"
