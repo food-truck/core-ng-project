@@ -13,7 +13,7 @@ metadata:
   displayName: core-ng-project
 
   # Optional. A detailed description of the repo
-  description: Most services in XM, and some services in NY
+  description: framework(Critical)
 
   # Required. The team (not individual) responsible for this system/service.
   # Please align to the team column in the Team Owners page (https://wonder.atlassian.net/wiki/spaces/T/pages/2618394120/Team+Owners).
